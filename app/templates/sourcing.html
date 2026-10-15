@@ -31,7 +31,7 @@
             <!-- Left Search Filter Column -->
             <div class="col-lg-5">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-bottom py-3">
+                    <div class="card-header border-bottom py-3">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-search text-success"></i> Sourcing Criteria
                         </h5>
@@ -64,15 +64,43 @@
                             </div>
 
                             <!-- Live Dork Query Preview -->
-                            <div class="mb-3 p-3 bg-light rounded-3 border">
-                                <span class="text-muted small fw-bold d-block mb-1"><i class="bi bi-terminal me-1"></i> Boolean Dork Query Preview:</span>
-                                <code class="small text-break" id="dorkPreview">site:linkedin.com/in/ "Job Title" AND "Location" AND "Skills"</code>
+                            <div class="mb-3 p-3 bg-body-tertiary rounded-3 border">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted small fw-bold"><i class="bi bi-terminal me-1"></i> Boolean Dork Query Preview:</span>
+                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 small text-primary" id="copyDorkBtn">
+                                        <i class="bi bi-clipboard"></i> Copy
+                                    </button>
+                                </div>
+                                <code class="small text-break d-block" id="dorkPreview">site:linkedin.com/in/ "Job Title" AND "Location" AND "Skills"</code>
                             </div>
 
-                            <button type="submit" class="btn btn-success w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="searchXrayBtn">
-                                <i class="bi bi-binoculars-fill"></i>
-                                <span>Execute Google X-Ray Search</span>
-                            </button>
+                            <!-- 1-Click Instant Search Buttons (Zero API Keys / Zero Google Console Required) -->
+                            <div class="mb-4">
+                                <div class="d-grid gap-2">
+                                    <a id="directGoogleSearchBtn" href="https://www.google.com" target="_blank" class="btn btn-primary py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
+                                        <i class="bi bi-google"></i>
+                                        <span>Open 1-Click Search on Google (0 Setup)</span>
+                                        <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                    <a id="directLinkedinSearchBtn" href="https://www.linkedin.com" target="_blank" class="btn btn-outline-secondary py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
+                                        <i class="bi bi-linkedin text-primary"></i>
+                                        <span>Open Search on LinkedIn</span>
+                                        <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="border-top pt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="small fw-semibold text-muted text-uppercase">Programmatic Backend API</span>
+                                    <span class="badge bg-secondary-subtle text-secondary small">Requires API Key</span>
+                                </div>
+                                <button type="submit" class="btn btn-outline-success w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="searchXrayBtn">
+                                    <i class="bi bi-robot"></i>
+                                    <span>Automated In-App Sourcing</span>
+                                </button>
+                                <div class="form-text small">Fetches and indexes candidate profiles directly into Kayatix via backend JSON API.</div>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -81,12 +109,29 @@
             <!-- Right Search Results Column -->
             <div class="col-lg-7">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <div class="card-header border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-linkedin text-primary"></i> Discovered Public LinkedIn Candidates
                         </h5>
+                        {% if settings.google_cse_cx_id %}
+                        <ul class="nav nav-pills nav-sm card-header-pills" id="sourcingTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active py-1 px-3 small" id="api-results-tab" data-bs-toggle="tab" data-bs-target="#api-results-pane" type="button" role="tab">In-App API</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-3 small" id="widget-tab" data-bs-toggle="tab" data-bs-target="#widget-pane" type="button" role="tab">
+                                    <i class="bi bi-google me-1"></i> CSE Widget (Zero Key)
+                                </button>
+                            </li>
+                        </ul>
+                        {% endif %}
                     </div>
                     <div class="card-body p-4">
+                        {% if settings.google_cse_cx_id %}
+                        <div class="tab-content" id="sourcingTabContent">
+                            <div class="tab-pane fade show active" id="api-results-pane" role="tabpanel">
+                        {% endif %}
+
                         <div id="xrayLoading" class="text-center py-5 d-none">
                             <div class="spinner-border text-success" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
                             <h5 class="fw-bold mt-3 text-secondary">Querying Google Custom Search API</h5>
@@ -95,11 +140,24 @@
 
                         <div id="xrayEmptyState" class="text-center py-5 text-muted">
                             <i class="bi bi-people-fill fs-1 text-secondary opacity-50 mb-3 d-block"></i>
-                            <h5 class="fw-semibold">No Candidates Discovered Yet</h5>
-                            <p class="small max-w-400 mx-auto">Fill in the role, location, and key skills on the left to programmatically discover public LinkedIn profiles without logging in or using a bot account.</p>
+                            <h5 class="fw-semibold">Ready to Source Candidates</h5>
+                            <p class="small max-w-400 mx-auto">Fill in the role, location, and key skills on the left. Click <strong>Open 1-Click Search on Google</strong> for instant zero-configuration discovery, or use <strong>Automated In-App Sourcing</strong>.</p>
                         </div>
 
                         <div id="xrayResultsList" class="d-none"></div>
+
+                        {% if settings.google_cse_cx_id %}
+                            </div>
+                            <div class="tab-pane fade" id="widget-pane" role="tabpanel">
+                                <div class="alert alert-info small mb-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    This interactive Google Programmable Search engine runs on your Search Engine ID (<code>{{ settings.google_cse_cx_id }}</code>) directly in the browser &mdash; <strong>100% free, unlimited, with zero Google Cloud API keys needed!</strong>
+                                </div>
+                                <script async src="https://cse.google.com/cse.js?cx={{ settings.google_cse_cx_id }}"></script>
+                                <div class="gcse-search"></div>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -111,20 +169,42 @@
 
 {% block scripts %}
 <script>
-    // Live Dork Preview update
+    // Live Dork Preview & 1-Click Search Links
     function updateDorkPreview() {
-        const title = document.getElementById('xrayJobTitle').value.trim() || 'Job Title';
-        const loc = document.getElementById('xrayLocation').value.trim() || 'Location';
+        const title = document.getElementById('xrayJobTitle').value.trim() || 'Senior Software Engineer';
+        const loc = document.getElementById('xrayLocation').value.trim() || 'Egypt';
         const skillsRaw = document.getElementById('xraySkills').value.trim();
-        const skills = skillsRaw ? skillsRaw.split(',').map(s => `"${s.trim()}"`).join(' AND ') : '"Skill1" AND "Skill2"';
+        const skillsList = skillsRaw ? skillsRaw.split(',').map(s => s.trim()).filter(Boolean) : ['Python', 'PostgreSQL'];
+        const skillsFormatted = skillsList.map(s => `"${s}"`).join(' AND ');
 
-        const dork = `site:linkedin.com/in/ "${title}" AND "${loc}" AND ${skills}`;
-        document.getElementById('dorkPreview').innerText = dork;
+        const dork = `site:linkedin.com/in/ "${title}" AND "${loc}" AND ${skillsFormatted}`;
+        const dorkEl = document.getElementById('dorkPreview');
+        if (dorkEl) dorkEl.innerText = dork;
+
+        // Update 1-Click Google Search URL
+        const googleUrl = 'https://www.google.com/search?q=' + encodeURIComponent(dork);
+        const googleBtn = document.getElementById('directGoogleSearchBtn');
+        if (googleBtn) googleBtn.href = googleUrl;
+
+        // Update 1-Click LinkedIn Search URL
+        const linkedinTerms = [title, loc, ...skillsList.slice(0, 3)].join(' ');
+        const linkedinUrl = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(linkedinTerms);
+        const linkedinBtn = document.getElementById('directLinkedinSearchBtn');
+        if (linkedinBtn) linkedinBtn.href = linkedinUrl;
     }
 
-    document.getElementById('xrayJobTitle').addEventListener('input', updateDorkPreview);
-    document.getElementById('xrayLocation').addEventListener('input', updateDorkPreview);
-    document.getElementById('xraySkills').addEventListener('input', updateDorkPreview);
+    document.getElementById('xrayJobTitle')?.addEventListener('input', updateDorkPreview);
+    document.getElementById('xrayLocation')?.addEventListener('input', updateDorkPreview);
+    document.getElementById('xraySkills')?.addEventListener('input', updateDorkPreview);
+
+    // Copy Dork Query button
+    document.getElementById('copyDorkBtn')?.addEventListener('click', () => {
+        const dork = document.getElementById('dorkPreview')?.innerText || '';
+        copyToClipboard(dork, 'Boolean Dork query copied to clipboard!');
+    });
+
+    // Initialize links on load
+    updateDorkPreview();
 </script>
 {% endblock %}
 

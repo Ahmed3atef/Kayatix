@@ -85,3 +85,31 @@ async def test_validate_all_settings_success(db_session):
         assert resp.overall_ready is True
         assert resp.gemini.status == "valid"
         assert resp.groq.status == "valid"
+
+
+def test_clean_google_cx_id():
+    """Verifies that script tags and raw URLs are stripped to extract just the cx ID."""
+    from app.services.settings_service import clean_google_cx_id
+
+    # Raw ID
+    assert clean_google_cx_id("c5c6e8ce160ff411e") == "c5c6e8ce160ff411e"
+    # Script tag
+    script_snippet = '<script async src="https://cse.google.com/cse.js?cx=c5c6e8ce160ff411e"></script>'
+    assert clean_google_cx_id(script_snippet) == "c5c6e8ce160ff411e"
+    # Full URL
+    url = "https://cse.google.com/cse.js?cx=c5c6e8ce160ff411e"
+    assert clean_google_cx_id(url) == "c5c6e8ce160ff411e"
+    # None or empty
+    assert clean_google_cx_id(None) is None
+    assert clean_google_cx_id("") is None
+
+
+@pytest.mark.asyncio
+async def test_validate_google_cse_keys_cx_only():
+    """Verifies that providing only Search Engine ID validates as ready for browser sourcing."""
+    from app.services.settings_service import validate_google_cse_keys
+
+    result = await validate_google_cse_keys(None, "c5c6e8ce160ff411e")
+    assert result.status == "valid"
+    assert "Browser widget & 1-Click X-Ray ready" in result.message
+

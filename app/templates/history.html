@@ -31,7 +31,7 @@
                 <form method="GET" action="/history" class="row g-2 align-items-center">
                     <div class="col-md-7">
                         <div class="input-group">
-                            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                            <span class="input-group-text"><i class="bi bi-search text-muted"></i></span>
                             <input type="text" class="form-control" name="q" value="{{ query }}" placeholder="Search by candidate name or keyword...">
                         </div>
                     </div>
@@ -57,7 +57,7 @@
             {% if records %}
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
+                    <thead class="table-light bg-body-secondary">
                         <tr>
                             <th class="ps-4">#</th>
                             <th>Candidate Name</th>
@@ -74,7 +74,7 @@
                         <tr>
                             <td class="ps-4 fw-bold text-muted">{{ record.id }}</td>
                             <td>
-                                <span class="fw-semibold text-dark">{{ record.candidate_name or "Unknown Candidate" }}</span>
+                                <span class="fw-semibold text-body-emphasis">{{ record.candidate_name or "Unknown Candidate" }}</span>
                             </td>
                             <td>
                                 {% if record.source_type == 'pdf_resume' %}

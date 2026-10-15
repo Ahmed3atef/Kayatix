@@ -24,10 +24,10 @@
         {% set analysis = record.evaluation_json %}
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
             <!-- Header Banner with Score -->
-            <div class="card-header bg-white border-bottom p-4">
+            <div class="card-header border-bottom p-4">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                     <div>
-                        <h4 class="fw-bold text-dark mb-1">{{ record.candidate_name or "Unknown Candidate" }}</h4>
+                        <h4 class="fw-bold text-body-emphasis mb-1">{{ record.candidate_name or "Unknown Candidate" }}</h4>
                         <div class="d-flex flex-wrap align-items-center gap-2 text-muted small">
                             <span><i class="bi bi-briefcase me-1"></i> {{ analysis.estimated_years_experience or 0 }} Years Experience</span>
                             <span>&bull;</span>
@@ -58,7 +58,7 @@
                 <!-- Executive Summary -->
                 <div class="mb-4">
                     <h6 class="fw-bold text-uppercase text-secondary small mb-2"><i class="bi bi-card-text me-1"></i> Executive Summary</h6>
-                    <p class="lead fs-6 bg-light p-3 rounded-3 border mb-0 text-dark">
+                    <p class="lead fs-6 bg-body-tertiary p-3 rounded-3 border mb-0 text-body-emphasis">
                         {{ analysis.executive_summary }}
                     </p>
                 </div>
@@ -66,7 +66,7 @@
                 <!-- Skills Breakdown -->
                 <div class="row g-3 mb-4">
                     <div class="col-md-6">
-                        <div class="p-3 border rounded-3 bg-light h-100">
+                        <div class="p-3 border rounded-3 bg-body-tertiary h-100">
                             <h6 class="fw-bold text-success mb-2 d-flex align-items-center gap-1">
                                 <i class="bi bi-check-circle"></i> Matched JD Skills ({{ analysis.matched_skills|length }})
                             </h6>
@@ -80,7 +80,7 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="p-3 border rounded-3 bg-light h-100">
+                        <div class="p-3 border rounded-3 bg-body-tertiary h-100">
                             <h6 class="fw-bold text-danger mb-2 d-flex align-items-center gap-1">
                                 <i class="bi bi-x-circle"></i> Missing Critical Skills ({{ analysis.missing_critical_skills|length }})
                             </h6>
@@ -140,14 +140,14 @@
                                 </button>
                             </h2>
                             <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#questionsAccordion">
-                                <div class="accordion-body bg-light">
+                                <div class="accordion-body bg-body-tertiary">
                                     <div class="mb-2">
                                         <span class="fw-bold text-muted small">Target Testing Area:</span>
                                         <span class="badge bg-secondary-subtle text-secondary">{{ q.target_area }}</span>
                                     </div>
                                     <div>
                                         <span class="fw-bold text-muted small d-block mb-1">Expected Answer Criteria &amp; Strong Signals:</span>
-                                        <div class="p-2 bg-white rounded border text-muted small">
+                                        <div class="p-2 bg-body rounded border text-muted small">
                                             {{ q.expected_answer_criteria }}
                                         </div>
                                     </div>

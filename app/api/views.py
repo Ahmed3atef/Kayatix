@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -7,7 +8,10 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.domain import EvaluationCache
-from app.services.settings_service import get_or_create_user_settings
+from app.services.settings_service import (
+    get_all_job_templates,
+    get_or_create_user_settings,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -78,11 +82,18 @@ async def dashboard_view(request: Request, db: AsyncSession = Depends(get_db)):
 async def screener_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Resume Screener: Ingest PDF resumes & evaluate against Job Descriptions."""
     user_settings = await get_or_create_user_settings(db)
+    job_templates = await get_all_job_templates(db)
+    templates_payload = [
+        {"id": t.id, "title": t.title, "category": t.category, "description": t.description}
+        for t in job_templates
+    ]
     return templates.TemplateResponse(
         request=request,
         name="screener.html",
         context={
             "settings": user_settings,
+            "job_templates": job_templates,
+            "job_templates_json": json.dumps(templates_payload),
         },
     )
 
@@ -91,11 +102,18 @@ async def screener_view(request: Request, db: AsyncSession = Depends(get_db)):
 async def portfolio_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Portfolio Analyzer: Scrapes & analyzes candidate blogs and GitHub profiles."""
     user_settings = await get_or_create_user_settings(db)
+    job_templates = await get_all_job_templates(db)
+    templates_payload = [
+        {"id": t.id, "title": t.title, "category": t.category, "description": t.description}
+        for t in job_templates
+    ]
     return templates.TemplateResponse(
         request=request,
         name="portfolio.html",
         context={
             "settings": user_settings,
+            "job_templates": job_templates,
+            "job_templates_json": json.dumps(templates_payload),
         },
     )
 
@@ -147,11 +165,13 @@ async def history_view(
 async def settings_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Settings Page: Manage AI provider accounts, subscriptions, and diagnostics."""
     user_settings = await get_or_create_user_settings(db)
+    job_templates = await get_all_job_templates(db)
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
         context={
             "settings": user_settings,
+            "job_templates": job_templates,
         },
     )
 

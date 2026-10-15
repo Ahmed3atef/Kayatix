@@ -90,10 +90,10 @@ function buildEvaluationCardHTML(apiData) {
                 </button>
             </h2>
             <div id="dynC${idx}" class="accordion-collapse collapse" data-bs-parent="#dynAccordion">
-                <div class="accordion-body bg-light small">
-                    <p class="mb-2 fw-semibold text-dark">${q.question}</p>
+                <div class="accordion-body bg-body-tertiary small">
+                    <p class="mb-2 fw-semibold text-body-emphasis">${q.question}</p>
                     <div class="mb-2"><strong>Tested Area:</strong> <span class="badge bg-secondary-subtle text-secondary">${q.target_area}</span></div>
-                    <div class="mb-3"><strong>Expected Signals:</strong> <div class="p-2 bg-white rounded border">${q.expected_answer_criteria}</div></div>
+                    <div class="mb-3"><strong>Expected Signals:</strong> <div class="p-2 bg-body rounded border">${q.expected_answer_criteria}</div></div>
                     <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('${q.question.replace(/'/g, "\\'")}', 'Question copied!')">
                         <i class="bi bi-clipboard"></i> Copy Question
                     </button>
@@ -104,9 +104,9 @@ function buildEvaluationCardHTML(apiData) {
 
     return `
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-3">
-            <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+            <div class="card-header border-bottom p-3 d-flex justify-content-between align-items-center">
                 <div>
-                    <h5 class="fw-bold mb-0 text-dark">${res.candidate_name || "Candidate Evaluation"}</h5>
+                    <h5 class="fw-bold mb-0 text-body-emphasis">${res.candidate_name || "Candidate Evaluation"}</h5>
                     <div class="d-flex align-items-center gap-2 small text-muted mt-1">
                         <span><i class="bi bi-briefcase me-1"></i> ${res.estimated_years_experience} YOE</span>
                         <span>&bull;</span>
@@ -120,18 +120,18 @@ function buildEvaluationCardHTML(apiData) {
             <div class="card-body p-3">
                 <div class="mb-3">
                     <h6 class="fw-bold text-uppercase text-secondary small mb-1">Executive Summary</h6>
-                    <div class="p-3 bg-light rounded-3 border small text-dark">${res.executive_summary}</div>
+                    <div class="p-3 bg-body-tertiary rounded-3 border small text-body-emphasis">${res.executive_summary}</div>
                 </div>
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <div class="p-3 border rounded-3 bg-light h-100">
+                        <div class="p-3 border rounded-3 bg-body-tertiary h-100">
                             <h6 class="fw-bold text-success mb-2 small"><i class="bi bi-check-circle"></i> Matched Skills</h6>
                             <div>${matchedSkills}</div>
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="p-3 border rounded-3 bg-light h-100">
+                        <div class="p-3 border rounded-3 bg-body-tertiary h-100">
                             <h6 class="fw-bold text-danger mb-2 small"><i class="bi bi-x-circle"></i> Missing Critical Skills</h6>
                             <div>${missingSkills}</div>
                         </div>
@@ -188,7 +188,15 @@ if (resumeForm) {
 
             if (!resp.ok) {
                 const errData = await resp.json().catch(() => ({}));
-                throw new Error(errData.detail || `Server returned HTTP ${resp.status}`);
+                let errorMsg = `Server returned HTTP ${resp.status}`;
+                if (typeof errData.detail === 'string') {
+                    errorMsg = errData.detail;
+                } else if (Array.isArray(errData.detail)) {
+                    errorMsg = errData.detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ');
+                } else if (errData.detail && typeof errData.detail === 'object') {
+                    errorMsg = JSON.stringify(errData.detail);
+                }
+                throw new Error(errorMsg);
             }
 
             const data = await resp.json();
@@ -216,11 +224,20 @@ if (portfolioForm) {
     portfolioForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const urlInput = document.getElementById('portfolioUrl');
+        const directTextInput = document.getElementById('portfolioDirectText');
         const jdInput = document.getElementById('portfolioJdText');
         const btn = document.getElementById('screenPortfolioBtn');
         const emptyState = document.getElementById('portfolioEmptyState');
         const loading = document.getElementById('portfolioLoading');
         const container = document.getElementById('portfolioResultContainer');
+
+        const urlVal = (urlInput?.value || '').trim();
+        const textVal = (directTextInput?.value || '').trim();
+
+        if (!urlVal && !textVal) {
+            showToast('Please provide a website URL or paste candidate text directly.', 'warning');
+            return;
+        }
 
         btn.disabled = true;
         emptyState.classList.add('d-none');
@@ -228,7 +245,8 @@ if (portfolioForm) {
         loading.classList.remove('d-none');
 
         const formData = new FormData();
-        formData.append('portfolio_url', urlInput.value);
+        if (urlVal) formData.append('portfolio_url', urlVal);
+        if (textVal) formData.append('portfolio_text', textVal);
         formData.append('job_description', jdInput.value);
 
         try {
@@ -239,7 +257,15 @@ if (portfolioForm) {
 
             if (!resp.ok) {
                 const errData = await resp.json().catch(() => ({}));
-                throw new Error(errData.detail || `Server returned HTTP ${resp.status}`);
+                let errorMsg = `Server returned HTTP ${resp.status}`;
+                if (typeof errData.detail === 'string') {
+                    errorMsg = errData.detail;
+                } else if (Array.isArray(errData.detail)) {
+                    errorMsg = errData.detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ');
+                } else if (errData.detail && typeof errData.detail === 'object') {
+                    errorMsg = JSON.stringify(errData.detail);
+                }
+                throw new Error(errorMsg);
             }
 
             const data = await resp.json();
@@ -248,7 +274,18 @@ if (portfolioForm) {
             showToast('Portfolio evaluation completed!', 'success');
         } catch (err) {
             emptyState.classList.remove('d-none');
-            showToast('Portfolio evaluation failed: ' + err.message, 'danger');
+            const msg = err.message || '';
+            showToast(msg, 'danger');
+
+            // If scraping failed due to client-side SPA or minimal text, auto-open the direct text box
+            if (msg.includes('SPA') || msg.includes('readable text') || msg.includes('403')) {
+                const collapseEl = document.getElementById('directTextCollapse');
+                if (collapseEl && !collapseEl.classList.contains('show')) {
+                    bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+                    directTextInput?.focus();
+                    showToast('Tip: This website is a JavaScript SPA. Paste candidate text directly above to evaluate!', 'info');
+                }
+            }
         } finally {
             loading.classList.add('d-none');
             btn.disabled = false;
@@ -308,7 +345,7 @@ if (xrayForm) {
                 profiles.forEach(p => {
                     const outreachText = `Hi there! I came across your profile regarding your experience as ${payload.job_title} and your background in ${payload.required_skills.slice(0, 2).join(' & ')}. We have an exciting opportunity that matches your skills. Would you be open to connecting?`;
                     html += `
-                        <div class="card border-0 shadow-sm rounded-3 mb-3 p-3 bg-light">
+                        <div class="card border-0 shadow-sm rounded-3 mb-3 p-3 bg-body-tertiary">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <h6 class="fw-bold mb-1 text-primary">${p.full_title}</h6>
@@ -332,8 +369,51 @@ if (xrayForm) {
             list.classList.remove('d-none');
             showToast(`Found ${profiles.length} LinkedIn candidate profiles!`, 'success');
         } catch (err) {
-            emptyState.classList.remove('d-none');
-            showToast('X-Ray search error: ' + err.message, 'danger');
+            const errStr = (err.message || '').toLowerCase();
+            if (errStr.includes('credentials') || errStr.includes('not configured') || errStr.includes('400')) {
+                const dorkQuery = `site:linkedin.com/in/ "${payload.job_title}" AND "${payload.location}" AND ${payload.required_skills.map(s => `"${s}"`).join(' AND ')}`;
+                const googleSearchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(dorkQuery);
+                const linkedinKeywords = [payload.job_title, payload.location, ...payload.required_skills.slice(0, 3)].join(' ');
+                const linkedinSearchUrl = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(linkedinKeywords);
+
+                list.innerHTML = `
+                    <div class="alert alert-warning border border-warning-subtle rounded-4 p-4 shadow-sm">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-info-circle-fill text-warning fs-4"></i>
+                            <h5 class="fw-bold mb-0 text-dark">Google Cloud API Key Not Configured</h5>
+                        </div>
+                        <p class="small text-muted mb-3">
+                            Google Cloud Console requires an API Key for <strong>backend automated in-app JSON scraping</strong>.
+                            <br>
+                            <strong>Good news: You do NOT need Google Cloud Console to source candidates!</strong>
+                            Choose one of the 1-click zero-setup options below:
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <a href="${googleSearchUrl}" target="_blank" class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-2">
+                                <i class="bi bi-google"></i>
+                                <span>Open Direct Search on Google (0 Setup)</span>
+                                <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                            <a href="${linkedinSearchUrl}" target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
+                                <i class="bi bi-linkedin text-primary"></i>
+                                <span>Open in LinkedIn Search</span>
+                                <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                            <button type="button" class="btn btn-outline-dark btn-sm" onclick="document.getElementById('widget-tab')?.click()">
+                                <i class="bi bi-window me-1"></i> Use CSE Widget (Zero Keys)
+                            </button>
+                        </div>
+                        <div class="small text-secondary border-top pt-2 mt-2">
+                            Want automated JSON parsing inside the app? <a href="/settings" class="text-primary fw-semibold">Add a Google Cloud API Key in Settings</a>.
+                        </div>
+                    </div>
+                `;
+                list.classList.remove('d-none');
+                showToast('Tip: Click "Open Direct Search on Google" above (0 setup needed!)', 'warning');
+            } else {
+                emptyState.classList.remove('d-none');
+                showToast('X-Ray search error: ' + err.message, 'danger');
+            }
         } finally {
             loading.classList.add('d-none');
             btn.disabled = false;

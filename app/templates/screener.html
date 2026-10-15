@@ -31,7 +31,7 @@
             <!-- Left Input Column -->
             <div class="col-lg-5">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-bottom py-3">
+                    <div class="card-header border-bottom py-3">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-file-earmark-pdf-fill text-danger"></i> Candidate Input
                         </h5>
@@ -62,10 +62,21 @@
                                         <button class="btn btn-sm btn-link text-decoration-none dropdown-toggle p-0" type="button" data-bs-toggle="dropdown">
                                             Load Template
                                         </button>
-                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                                            <li><button type="button" class="dropdown-item small load-jd-preset" data-preset="backend">FastAPI Backend Engineer</button></li>
-                                            <li><button type="button" class="dropdown-item small load-jd-preset" data-preset="fullstack">Full Stack Python / React</button></li>
-                                            <li><button type="button" class="dropdown-item small load-jd-preset" data-preset="devops">DevOps &amp; Cloud Platform</button></li>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" id="jdTemplateDropdownMenu">
+                                            {% for t in job_templates %}
+                                            <li>
+                                                <button type="button" class="dropdown-item small load-jd-preset d-flex justify-content-between align-items-center gap-2" data-template-id="{{ t.id }}">
+                                                    <span>{{ t.title }}</span>
+                                                    <span class="badge bg-secondary-subtle text-secondary fs-8">{{ t.category }}</span>
+                                                </button>
+                                            </li>
+                                            {% endfor %}
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item small text-primary d-flex align-items-center gap-1" href="/settings#templates-pane">
+                                                    <i class="bi bi-gear-fill"></i> Configure Templates...
+                                                </a>
+                                            </li>
                                         </ul>
                                     </div>
                                 </div>
@@ -84,7 +95,7 @@
             <!-- Right Evaluation Results Column -->
             <div class="col-lg-7">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <div class="card-header border-bottom py-3 d-flex justify-content-between align-items-center">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-clipboard2-data-fill text-primary"></i> Evaluation &amp; Benchmarking Report
                         </h5>
@@ -146,19 +157,20 @@
         }
     });
 
-    // Sample JD Presets
-    const presets = {
-        backend: "Job Title: Senior FastAPI Backend Engineer\nLocation: Remote / Cairo\nRequirements:\n- 5+ years experience building production backends with Python & FastAPI\n- Deep proficiency with SQLAlchemy async ORM, PostgreSQL schema design, and query optimization\n- Experience building microservices, Docker containerization, and REST API standards\n- Hands-on experience with asynchronous rate-limiting, circuit-breakers, and caching architectures (Redis/SQLite)\n- Strong understanding of unit testing with pytest and async fixtures.",
-        fullstack: "Job Title: Full Stack Software Engineer (Python & React)\nRequirements:\n- 4+ years of professional full-stack development experience\n- Python, FastAPI or Django on the backend\n- Modern React, TypeScript, and TailwindCSS or Bootstrap 5 on the frontend\n- Experience integrating third-party APIs, OAuth, and LLM providers\n- Strong database knowledge (PostgreSQL, SQLite).",
-        devops: "Job Title: Cloud & DevOps Platform Engineer\nRequirements:\n- 5+ years managing Linux infrastructure and cloud environments\n- Extensive hands-on experience with Docker, Kubernetes, and Helm\n- CI/CD automation pipelines (GitHub Actions, GitLab CI)\n- Infrastructure as Code (Terraform)\n- Python scripting for system automation."
-    };
+    // Database-backed Job Description Templates
+    const rawTemplates = {{ job_templates_json | safe }};
+    const templatesMap = {};
+    if (Array.isArray(rawTemplates)) {
+        rawTemplates.forEach(t => { templatesMap[t.id] = t; });
+    }
 
     document.querySelectorAll('.load-jd-preset').forEach(btn => {
         btn.addEventListener('click', () => {
-            const p = btn.getAttribute('data-preset');
-            if (presets[p]) {
-                document.getElementById('resumeJdText').value = presets[p];
-                showToast(`Loaded ${btn.innerText} template`, 'info');
+            const tid = btn.getAttribute('data-template-id');
+            const tmpl = templatesMap[tid];
+            if (tmpl) {
+                document.getElementById('resumeJdText').value = tmpl.description;
+                showToast(`Loaded "${tmpl.title}" template`, 'info');
             }
         });
     });

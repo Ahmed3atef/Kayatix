@@ -9,15 +9,40 @@ async def execute_linkedin_xray_search(req: XRaySearchRequest) -> List[XRayProfi
     Uses Google Custom Search JSON API to perform legal X-Ray searches
     over publicly indexed LinkedIn profiles without touching LinkedIn servers directly.
     """
-    if not settings.GOOGLE_CSE_API_KEY or not settings.GOOGLE_CSE_CX_ID:
-        raise ValueError("Google Custom Search API credentials are not configured in .env")
+    api_key = settings.GOOGLE_CSE_API_KEY
+    cx_id = settings.GOOGLE_CSE_CX_ID
+
+    if not api_key or not cx_id:
+        try:
+            from sqlalchemy import select
+            from app.core.database import AsyncSessionLocal
+            from app.models.domain import UserSettings
+
+            async with AsyncSessionLocal() as session:
+                stmt = select(UserSettings)
+                db_settings = (await session.execute(stmt)).scalars().first()
+                if db_settings:
+                    api_key = api_key or db_settings.google_cse_api_key
+                    cx_id = cx_id or db_settings.google_cse_cx_id
+                    if db_settings.google_cse_api_key:
+                        settings.GOOGLE_CSE_API_KEY = db_settings.google_cse_api_key
+                    if db_settings.google_cse_cx_id:
+                        settings.GOOGLE_CSE_CX_ID = db_settings.google_cse_cx_id
+        except Exception:
+            pass
+
+    if not api_key or not cx_id:
+        raise ValueError(
+            "Google Custom Search API credentials are not configured in Settings / .env. "
+            "(Tip: You can use the 1-Click Search on Google button or the CSE Widget without an API key!)"
+        )
 
     skills_query = " AND ".join([f'"{skill}"' for skill in req.required_skills[:4]])
     dork_query = f'site:linkedin.com/in/ "{req.job_title}" AND "{req.location}" AND {skills_query}'
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
-        "key": settings.GOOGLE_CSE_API_KEY,
-        "cx": settings.GOOGLE_CSE_CX_ID,
+        "key": api_key,
+        "cx": cx_id,
         "q": dork_query,
         "num": req.max_results,
     }

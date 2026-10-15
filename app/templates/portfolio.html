@@ -31,7 +31,7 @@
             <!-- Left Input Column -->
             <div class="col-lg-5">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-bottom py-3">
+                    <div class="card-header border-bottom py-3">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-globe text-primary"></i> Target Candidate Website
                         </h5>
@@ -40,19 +40,54 @@
                         <form id="portfolioScreenForm">
                             <div class="mb-3">
                                 <label for="portfolioUrl" class="form-label fw-semibold">
-                                    Candidate Portfolio / GitHub / Blog URL <span class="text-danger">*</span>
+                                    Candidate Portfolio / GitHub / Blog URL
                                 </label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
-                                    <input class="form-control" type="url" id="portfolioUrl" placeholder="https://janedoe.dev or https://github.com/username" required>
+                                    <input class="form-control" type="text" id="portfolioUrl" placeholder="https://janedoe.dev or https://github.com/username">
                                 </div>
-                                <div class="form-text">HTTPX asynchronously fetches the webpage and Trafilatura strips navigation bars, ads, and HTML noise.</div>
+                                <div class="form-text">Asynchronously extracts text, metadata, OpenGraph tags, and structured data.</div>
+                            </div>
+
+                            <!-- Optional Direct Portfolio Text Fallback (for SPAs, Protected Sites, & Bio Text) -->
+                            <div class="mb-3">
+                                <a class="small text-decoration-none d-inline-flex align-items-center gap-1 mb-2 fw-semibold" data-bs-toggle="collapse" href="#directTextCollapse" role="button" aria-expanded="false" id="toggleDirectTextLink">
+                                    <i class="bi bi-file-earmark-text text-primary"></i>
+                                    <span>Or paste candidate bio / text directly (Fallback for SPAs)</span>
+                                </a>
+                                <div class="collapse" id="directTextCollapse">
+                                    <textarea class="form-control font-monospace small" id="portfolioDirectText" rows="4" placeholder="If the website is a JavaScript Single-Page App (SPA) or requires login, paste candidate bio, GitHub readme, or projects summary here..."></textarea>
+                                    <div class="form-text">Pasted text will be evaluated directly against the job requirements with 0 network dependencies.</div>
+                                </div>
                             </div>
 
                             <div class="mb-3">
-                                <label for="portfolioJdText" class="form-label fw-semibold">
-                                    Target Job Description (JD) <span class="text-danger">*</span>
-                                </label>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="portfolioJdText" class="form-label fw-semibold mb-0">
+                                        Target Job Description (JD) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-link text-decoration-none dropdown-toggle p-0" type="button" data-bs-toggle="dropdown">
+                                            Load Template
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" id="portfolioJdDropdown">
+                                            {% for t in job_templates %}
+                                            <li>
+                                                <button type="button" class="dropdown-item small load-portfolio-preset d-flex justify-content-between align-items-center gap-2" data-template-id="{{ t.id }}">
+                                                    <span>{{ t.title }}</span>
+                                                    <span class="badge bg-secondary-subtle text-secondary fs-8">{{ t.category }}</span>
+                                                </button>
+                                            </li>
+                                            {% endfor %}
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item small text-primary d-flex align-items-center gap-1" href="/settings#templates-pane">
+                                                    <i class="bi bi-gear-fill"></i> Configure Templates...
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
                                 <textarea class="form-control" id="portfolioJdText" rows="8" placeholder="Paste the target job requirements against which the candidate's portfolio will be benchmarked..." required></textarea>
                             </div>
 
@@ -68,7 +103,7 @@
             <!-- Right Results Column -->
             <div class="col-lg-7">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <div class="card-header border-bottom py-3 d-flex justify-content-between align-items-center">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-card-checklist text-primary"></i> Portfolio Analysis Report
                         </h5>
@@ -95,4 +130,25 @@
     </div>
 </div>
 {% endblock %}
+ 
+{% block scripts %}
+<script>
+    // Database-backed Job Description Templates
+    const rawTemplates = {{ job_templates_json | safe }};
+    const templatesMap = {};
+    if (Array.isArray(rawTemplates)) {
+        rawTemplates.forEach(t => { templatesMap[t.id] = t; });
+    }
 
+    document.querySelectorAll('.load-portfolio-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tid = btn.getAttribute('data-template-id');
+            const tmpl = templatesMap[tid];
+            if (tmpl) {
+                document.getElementById('portfolioJdText').value = tmpl.description;
+                showToast(`Loaded "${tmpl.title}" template`, 'info');
+            }
+        });
+    });
+</script>
+{% endblock %}

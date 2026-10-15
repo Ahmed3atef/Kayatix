@@ -90,13 +90,57 @@ async def test_evaluate_portfolio_website_success(client, sample_candidate_evalu
 
 @pytest.mark.asyncio
 async def test_evaluate_portfolio_website_invalid_url(client):
-    """Invalid URL format must be rejected by Pydantic validation with HTTP 422."""
+    """Invalid URL format must be rejected with HTTP 422."""
     data = {
         "job_description": "We need a Senior Python Engineer",
         "portfolio_url": "not-a-valid-http-url",
     }
     response = await client.post("/api/v1/evaluation/portfolio-website", data=data)
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_evaluate_portfolio_website_direct_text_fallback(client, sample_candidate_evaluation):
+    """Direct portfolio text fallback evaluates successfully without network scraping."""
+    data = {
+        "job_description": "We need a Senior Python Engineer with Docker and FastAPI experience",
+        "portfolio_text": "Jane Doe - Senior Full Stack Engineer. Specializing in Python, FastAPI, Docker, and AWS.",
+    }
+    with patch(
+        "app.api.v1.endpoints_evaluation.evaluate_candidate_with_fallback",
+        new_callable=AsyncMock,
+    ) as mock_eval:
+        mock_eval.return_value = (sample_candidate_evaluation, "local_offline")
+        response = await client.post("/api/v1/evaluation/portfolio-website", data=data)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["analysis"]["candidate_name"] == "Jane Doe"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_portfolio_website_spa_fallback_success(client, sample_candidate_evaluation):
+    """SPA website with zero static text gracefully evaluates via dynamic fallback without 422."""
+    data = {
+        "job_description": "We need a Senior Engineer",
+        "portfolio_url": "https://ahmed-atef.vercel.app",
+    }
+    with (
+        patch(
+            "app.api.v1.endpoints_evaluation.scrape_candidate_portfolio",
+            side_effect=ValueError("Could not extract sufficient readable text (< 30 characters)"),
+        ),
+        patch(
+            "app.api.v1.endpoints_evaluation.evaluate_candidate_with_fallback",
+            new_callable=AsyncMock,
+        ) as mock_eval,
+    ):
+        mock_eval.return_value = (sample_candidate_evaluation, "hybrid")
+        response = await client.post("/api/v1/evaluation/portfolio-website", data=data)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["analysis"]["candidate_name"] == "Jane Doe"
+
+
 
 
 @pytest.mark.asyncio
