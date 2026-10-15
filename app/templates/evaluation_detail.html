@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Evaluation Report #{{ record.id }} - Kayatix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-9">
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <a href="/history" class="btn btn-outline-secondary btn-sm mb-2 d-inline-flex align-items-center gap-1">
+                    <i class="bi bi-arrow-left"></i> Back to History
+                </a>
+                <h3 class="fw-bold mb-1">Candidate Evaluation Report</h3>
+                <p class="text-muted small mb-0">Record ID: #{{ record.id }} &bull; Source: <span class="badge bg-secondary-subtle text-secondary">{{ record.source_type }}</span> &bull; SHA-256 Hash: <code class="small">{{ record.request_hash[:16] }}...</code></p>
+            </div>
+            <div>
+                <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1" onclick="window.print()">
+                    <i class="bi bi-printer"></i> Print Report
+                </button>
+            </div>
+        </div>
+
+        {% set analysis = record.evaluation_json %}
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+            <!-- Header Banner with Score -->
+            <div class="card-header bg-white border-bottom p-4">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                    <div>
+                        <h4 class="fw-bold text-dark mb-1">{{ record.candidate_name or "Unknown Candidate" }}</h4>
+                        <div class="d-flex flex-wrap align-items-center gap-2 text-muted small">
+                            <span><i class="bi bi-briefcase me-1"></i> {{ analysis.estimated_years_experience or 0 }} Years Experience</span>
+                            <span>&bull;</span>
+                            <span><i class="bi bi-cpu me-1"></i> Provider: <span class="badge bg-secondary font-monospace">{{ record.provider_used }}</span></span>
+                            <span>&bull;</span>
+                            <span><i class="bi bi-calendar3 me-1"></i> Evaluated: {{ record.created_at.strftime('%Y-%m-%d %H:%M UTC') if record.created_at else 'N/A' }}</span>
+                        </div>
+                    </div>
+                    <div class="text-md-end">
+                        {% if record.match_score >= 80 %}
+                        <div class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-5 rounded-pill">
+                            <i class="bi bi-check-circle-fill me-1"></i> {{ record.match_score }}% Match (Strong Fit)
+                        </div>
+                        {% elif record.match_score >= 60 %}
+                        <div class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 fs-5 rounded-pill">
+                            <i class="bi bi-exclamation-circle-fill me-1"></i> {{ record.match_score }}% Match (Moderate)
+                        </div>
+                        {% else %}
+                        <div class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-5 rounded-pill">
+                            <i class="bi bi-x-circle-fill me-1"></i> {{ record.match_score }}% Match (Low Fit)
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-body p-4">
+                <!-- Executive Summary -->
+                <div class="mb-4">
+                    <h6 class="fw-bold text-uppercase text-secondary small mb-2"><i class="bi bi-card-text me-1"></i> Executive Summary</h6>
+                    <p class="lead fs-6 bg-light p-3 rounded-3 border mb-0 text-dark">
+                        {{ analysis.executive_summary }}
+                    </p>
+                </div>
+
+                <!-- Skills Breakdown -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded-3 bg-light h-100">
+                            <h6 class="fw-bold text-success mb-2 d-flex align-items-center gap-1">
+                                <i class="bi bi-check-circle"></i> Matched JD Skills ({{ analysis.matched_skills|length }})
+                            </h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for skill in analysis.matched_skills %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">{{ skill }}</span>
+                                {% else %}
+                                <span class="text-muted small">No verified matching skills found.</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded-3 bg-light h-100">
+                            <h6 class="fw-bold text-danger mb-2 d-flex align-items-center gap-1">
+                                <i class="bi bi-x-circle"></i> Missing Critical Skills ({{ analysis.missing_critical_skills|length }})
+                            </h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for skill in analysis.missing_critical_skills %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ skill }}</span>
+                                {% else %}
+                                <span class="text-muted small text-success">All required skills present!</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Projects & Impact -->
+                {% if analysis.detected_projects_and_impact %}
+                <div class="mb-4">
+                    <h6 class="fw-bold text-uppercase text-secondary small mb-2"><i class="bi bi-trophy me-1"></i> Detected Projects & Quantifiable Impact</h6>
+                    <ul class="list-group list-group-flush border rounded-3 overflow-hidden">
+                        {% for project in analysis.detected_projects_and_impact %}
+                        <li class="list-group-item d-flex align-items-start gap-2">
+                            <i class="bi bi-arrow-right-circle text-primary mt-1"></i>
+                            <div>{{ project }}</div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- Red Flags & Gaps -->
+                {% if analysis.red_flags_and_gaps %}
+                <div class="mb-4">
+                    <div class="alert alert-warning border-warning-subtle rounded-3 mb-0">
+                        <h6 class="fw-bold text-warning-emphasis d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Red Flags, Timeline Gaps &amp; Ambiguities
+                        </h6>
+                        <ul class="mb-0 ps-3">
+                            {% for flag in analysis.red_flags_and_gaps %}
+                            <li>{{ flag }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Tailored Interview Questions -->
+                {% if analysis.tailored_interview_questions %}
+                <div>
+                    <h6 class="fw-bold text-uppercase text-secondary small mb-3"><i class="bi bi-question-diamond me-1"></i> Tailored Technical &amp; Behavioral Questions</h6>
+                    <div class="accordion" id="questionsAccordion">
+                        {% for q in analysis.tailored_interview_questions %}
+                        <div class="accordion-item mb-2 border rounded-3 overflow-hidden">
+                            <h2 class="accordion-header" id="heading{{ loop.index }}">
+                                <button class="accordion-button collapsed fw-semibold py-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
+                                    <span class="badge bg-primary-subtle text-primary border me-2">{{ q.category }}</span>
+                                    <span>{{ q.question }}</span>
+                                </button>
+                            </h2>
+                            <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#questionsAccordion">
+                                <div class="accordion-body bg-light">
+                                    <div class="mb-2">
+                                        <span class="fw-bold text-muted small">Target Testing Area:</span>
+                                        <span class="badge bg-secondary-subtle text-secondary">{{ q.target_area }}</span>
+                                    </div>
+                                    <div>
+                                        <span class="fw-bold text-muted small d-block mb-1">Expected Answer Criteria &amp; Strong Signals:</span>
+                                        <div class="p-2 bg-white rounded border text-muted small">
+                                            {{ q.expected_answer_criteria }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

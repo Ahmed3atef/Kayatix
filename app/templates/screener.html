@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Resume Screener - Kayatix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-xl-11">
+        
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1 small">
+                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Resume Screener</li>
+                    </ol>
+                </nav>
+                <h3 class="fw-bold mb-0">Resume Screening &amp; Benchmarking</h3>
+                <p class="text-muted small mb-0">Deterministic parsing of PDF resumes and LinkedIn exports against Target Job Descriptions with instant cache acceleration.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle p-2">
+                    <i class="bi bi-shield-check me-1"></i> Multi-Provider Resilient
+                </span>
+                <a href="/history" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-clock-history"></i> Cache History
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Left Input Column -->
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-file-earmark-pdf-fill text-danger"></i> Candidate Input
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="resumeScreenForm">
+                            <!-- File Drag & Drop Zone -->
+                            <div class="mb-3">
+                                <label for="resumeFile" class="form-label fw-semibold">
+                                    Candidate Resume PDF <span class="text-danger">*</span>
+                                </label>
+                                <div class="p-3 border border-2 border-dashed rounded-3 text-center bg-light" id="dropZone">
+                                    <i class="bi bi-file-earmark-arrow-up fs-2 text-primary d-block mb-1"></i>
+                                    <input class="form-control d-none" type="file" id="resumeFile" accept=".pdf" required>
+                                    <label for="resumeFile" class="btn btn-sm btn-outline-primary mb-1">Select PDF File</label>
+                                    <div class="small text-muted" id="fileChosenText">or drag &amp; drop PDF resume here</div>
+                                </div>
+                                <div class="form-text mt-1">Supports standard PDF resumes and LinkedIn "Save to PDF" exports.</div>
+                            </div>
+
+                            <!-- Job Description & Presets -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="resumeJdText" class="form-label fw-semibold mb-0">
+                                        Target Job Description (JD) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-link text-decoration-none dropdown-toggle p-0" type="button" data-bs-toggle="dropdown">
+                                            Load Template
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                            <li><button type="button" class="dropdown-item small load-jd-preset" data-preset="backend">FastAPI Backend Engineer</button></li>
+                                            <li><button type="button" class="dropdown-item small load-jd-preset" data-preset="fullstack">Full Stack Python / React</button></li>
+                                            <li><button type="button" class="dropdown-item small load-jd-preset" data-preset="devops">DevOps &amp; Cloud Platform</button></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <textarea class="form-control" id="resumeJdText" rows="8" placeholder="Paste the job description or role requirements here..." required></textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="screenResumeBtn">
+                                <i class="bi bi-cpu-fill"></i>
+                                <span>Screen Candidate Fit</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Evaluation Results Column -->
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-clipboard2-data-fill text-primary"></i> Evaluation &amp; Benchmarking Report
+                        </h5>
+                        <div id="resultHeaderActions" class="d-none">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+                                <i class="bi bi-printer"></i> Print
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <!-- Loading State -->
+                        <div id="evaluationLoading" class="text-center py-5 d-none">
+                            <div class="spinner-border text-primary" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+                            <h5 class="fw-bold mt-3 text-secondary">Analyzing Candidate Profile</h5>
+                            <p class="text-muted small">Sanitizing PDF &bull; Checking SHA-256 Deduplication &bull; Running AI Fallback Circuit...</p>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="evaluationEmptyState" class="text-center py-5 text-muted">
+                            <i class="bi bi-person-bounding-box fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                            <h5 class="fw-semibold">Ready for Candidate Ingestion</h5>
+                            <p class="small max-w-400 mx-auto">Upload a resume PDF and supply the target Job Description on the left to generate a comprehensive merit-based fit report, red flag analysis, and custom interview questions.</p>
+                        </div>
+
+                        <!-- Results Container -->
+                        <div id="evaluationResultContainer" class="d-none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // File input name update
+    const fileInput = document.getElementById('resumeFile');
+    const fileChosenText = document.getElementById('fileChosenText');
+    const dropZone = document.getElementById('dropZone');
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) {
+            fileChosenText.innerHTML = `<strong>Selected:</strong> ${fileInput.files[0].name} (${(fileInput.files[0].size / 1024).toFixed(1)} KB)`;
+            dropZone.classList.add('border-primary', 'bg-primary-subtle');
+        }
+    });
+
+    // Drag and drop handling
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-primary'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-primary'); });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-primary');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            fileChosenText.innerHTML = `<strong>Selected:</strong> ${fileInput.files[0].name} (${(fileInput.files[0].size / 1024).toFixed(1)} KB)`;
+        }
+    });
+
+    // Sample JD Presets
+    const presets = {
+        backend: "Job Title: Senior FastAPI Backend Engineer\nLocation: Remote / Cairo\nRequirements:\n- 5+ years experience building production backends with Python & FastAPI\n- Deep proficiency with SQLAlchemy async ORM, PostgreSQL schema design, and query optimization\n- Experience building microservices, Docker containerization, and REST API standards\n- Hands-on experience with asynchronous rate-limiting, circuit-breakers, and caching architectures (Redis/SQLite)\n- Strong understanding of unit testing with pytest and async fixtures.",
+        fullstack: "Job Title: Full Stack Software Engineer (Python & React)\nRequirements:\n- 4+ years of professional full-stack development experience\n- Python, FastAPI or Django on the backend\n- Modern React, TypeScript, and TailwindCSS or Bootstrap 5 on the frontend\n- Experience integrating third-party APIs, OAuth, and LLM providers\n- Strong database knowledge (PostgreSQL, SQLite).",
+        devops: "Job Title: Cloud & DevOps Platform Engineer\nRequirements:\n- 5+ years managing Linux infrastructure and cloud environments\n- Extensive hands-on experience with Docker, Kubernetes, and Helm\n- CI/CD automation pipelines (GitHub Actions, GitLab CI)\n- Infrastructure as Code (Terraform)\n- Python scripting for system automation."
+    };
+
+    document.querySelectorAll('.load-jd-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const p = btn.getAttribute('data-preset');
+            if (presets[p]) {
+                document.getElementById('resumeJdText').value = presets[p];
+                showToast(`Loaded ${btn.innerText} template`, 'info');
+            }
+        });
+    });
+</script>
+{% endblock %}
+

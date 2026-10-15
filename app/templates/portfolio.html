@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio Analyzer - Kayatix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-xl-11">
+        
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1 small">
+                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Portfolio Analyzer</li>
+                    </ol>
+                </nav>
+                <h3 class="fw-bold mb-0">Deep Portfolio &amp; Personal Website Analysis</h3>
+                <p class="text-muted small mb-0">Asynchronous scraping and boilerplate removal of candidate portfolios, blogs, and GitHub profiles using httpx &amp; trafilatura.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle p-2">
+                    <i class="bi bi-code-slash me-1"></i> Trafilatura Engine
+                </span>
+                <a href="/screener" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-file-earmark-pdf"></i> Resume Screener
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Left Input Column -->
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-globe text-primary"></i> Target Candidate Website
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="portfolioScreenForm">
+                            <div class="mb-3">
+                                <label for="portfolioUrl" class="form-label fw-semibold">
+                                    Candidate Portfolio / GitHub / Blog URL <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+                                    <input class="form-control" type="url" id="portfolioUrl" placeholder="https://janedoe.dev or https://github.com/username" required>
+                                </div>
+                                <div class="form-text">HTTPX asynchronously fetches the webpage and Trafilatura strips navigation bars, ads, and HTML noise.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="portfolioJdText" class="form-label fw-semibold">
+                                    Target Job Description (JD) <span class="text-danger">*</span>
+                                </label>
+                                <textarea class="form-control" id="portfolioJdText" rows="8" placeholder="Paste the target job requirements against which the candidate's portfolio will be benchmarked..." required></textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="screenPortfolioBtn">
+                                <i class="bi bi-robot"></i>
+                                <span>Scrape &amp; Analyze Website</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Results Column -->
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-card-checklist text-primary"></i> Portfolio Analysis Report
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div id="portfolioLoading" class="text-center py-5 d-none">
+                            <div class="spinner-border text-primary" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+                            <h5 class="fw-bold mt-3 text-secondary">Scraping &amp; Evaluating Content</h5>
+                            <p class="text-muted small">Trafilatura extracting core article text &bull; Checking cache &bull; Running AI engine...</p>
+                        </div>
+
+                        <div id="portfolioEmptyState" class="text-center py-5 text-muted">
+                            <i class="bi bi-laptop fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                            <h5 class="fw-semibold">No Website Evaluated Yet</h5>
+                            <p class="small max-w-400 mx-auto">Enter a candidate's personal portfolio URL or GitHub profile link to extract project achievements and evaluate engineering fit.</p>
+                        </div>
+
+                        <div id="portfolioResultContainer" class="d-none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+

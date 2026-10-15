@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Kayatix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-9">
+        
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1 small">
+                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Settings</li>
+                    </ol>
+                </nav>
+                <h3 class="fw-bold mb-1">Settings</h3>
+                <p class="text-muted small mb-0">Configure your multi-provider AI credentials, Google X-Ray keys, rate limits, and subscription preferences. All settings are persisted directly in the database.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle p-2">
+                    <i class="bi bi-database-check me-1"></i> Database Synced
+                </span>
+                <a href="/" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+            </div>
+        </div>
+
+        <!-- Live Validation Alert Box -->
+        <div id="validationResultCard" class="card border-0 shadow-sm rounded-4 mb-4 d-none">
+            <div class="card-header bg-white border-bottom fw-bold d-flex justify-content-between align-items-center py-3">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-patch-check-fill text-primary"></i> Live Provider Connectivity Diagnostics
+                </span>
+                <span id="overallStatusBadge" class="badge bg-secondary">Testing...</span>
+            </div>
+            <div class="card-body p-4" id="validationDetailsBody"></div>
+        </div>
+
+        <!-- Settings Tabs: UI Form vs Raw .env Editor -->
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+            <div class="card-header bg-white border-bottom pt-3 pb-0 px-4">
+                <ul class="nav nav-tabs card-header-tabs" id="settingsModeTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-semibold" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-pane" type="button" role="tab">
+                            <i class="bi bi-sliders text-primary me-1"></i> Guided Account Form
+                        </button>
+                    </li>
+
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-semibold" id="env-tab" data-bs-toggle="tab" data-bs-target="#env-pane" type="button" role="tab">
+                            <i class="bi bi-database text-secondary me-1"></i> Raw Config Editor (Database)
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card-body p-4">
+                <div class="tab-content" id="settingsTabContent">
+                    
+                    <!-- TAB 1: GUIDED FORM -->
+                    <div class="tab-pane fade show active" id="form-pane" role="tabpanel">
+                        <form id="settingsForm">
+                            <!-- 1. AI PROVIDERS -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-uppercase text-secondary small mb-3">
+                                    <i class="bi bi-cpu-fill text-primary me-1"></i> 1. Multi-Provider AI Credentials
+                                </h6>
+                                
+                                <!-- Google Gemini -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label for="geminiKey" class="form-label fw-semibold mb-0">
+                                            Google Gemini API Key <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1">Priority 1 &bull; 15 RPM</span>
+                                        </label>
+                                        <a href="https://aistudio.google.com/" target="_blank" class="small text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i> Get Gemini Key
+                                        </a>
+                                    </div>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-key text-muted"></i></span>
+                                        <input type="password" class="form-control font-monospace" id="geminiKey" placeholder="AIzaSy..." value="{{ settings.gemini_api_key or '' }}">
+                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="geminiKey"><i class="bi bi-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Primary model: <code>gemini-2.5-flash</code> with native structured outputs. Rate limit: 15 RPM.</div>
+                                </div>
+
+                                <!-- Groq Cloud -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label for="groqKey" class="form-label fw-semibold mb-0">
+                                            Groq Cloud API Key <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">Priority 2 &bull; 30 RPM</span>
+                                        </label>
+                                        <a href="https://console.groq.com/keys" target="_blank" class="small text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i> Get Groq Key
+                                        </a>
+                                    </div>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-lightning-charge text-muted"></i></span>
+                                        <input type="password" class="form-control font-monospace" id="groqKey" placeholder="gsk_..." value="{{ settings.groq_api_key or '' }}">
+                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="groqKey"><i class="bi bi-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Secondary fallback model: <code>llama-3.3-70b-versatile</code> on high-speed LPUs. Rate limit: 30 RPM.</div>
+                                </div>
+
+                                <!-- OpenRouter -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label for="openrouterKey" class="form-label fw-semibold mb-0">
+                                            OpenRouter API Key <span class="badge bg-secondary-subtle text-secondary border ms-1">Priority 3 &bull; Fallback Pool</span>
+                                        </label>
+                                        <a href="https://openrouter.ai/settings/keys" target="_blank" class="small text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i> Get OpenRouter Key
+                                        </a>
+                                    </div>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-diagram-3 text-muted"></i></span>
+                                        <input type="password" class="form-control font-monospace" id="openrouterKey" placeholder="sk-or-v1-..." value="{{ settings.openrouter_api_key or '' }}">
+                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="openrouterKey"><i class="bi bi-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Tertiary fallback model: <code>meta-llama/llama-3.1-8b-instruct:free</code>. Access to fallback model pool.</div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <!-- 2. GOOGLE CUSTOM SEARCH (X-RAY) -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-uppercase text-secondary small mb-3">
+                                    <i class="bi bi-search text-success me-1"></i> 2. Google Custom Search (X-Ray LinkedIn Sourcing)
+                                </h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <label for="googleCseKey" class="form-label fw-semibold mb-0">Google CSE API Key</label>
+                                            <a href="https://console.cloud.google.com/" target="_blank" class="small text-decoration-none">Console</a>
+                                        </div>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-shield-lock text-muted"></i></span>
+                                            <input type="password" class="form-control font-monospace" id="googleCseKey" placeholder="Google Cloud API Key" value="{{ settings.google_cse_api_key or '' }}">
+                                            <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="googleCseKey"><i class="bi bi-eye"></i></button>
+                                        </div>
+                                        <div class="form-text">Custom Search API key from Google Cloud Console.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <label for="googleCseCx" class="form-label fw-semibold mb-0">Search Engine ID (cx)</label>
+                                            <a href="https://programmablesearchengine.google.com/" target="_blank" class="small text-decoration-none">Engine ID</a>
+                                        </div>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-hash text-muted"></i></span>
+                                            <input type="text" class="form-control font-monospace" id="googleCseCx" placeholder="cx Search Engine ID" value="{{ settings.google_cse_cx_id or '' }}">
+                                        </div>
+                                        <div class="form-text">Programmable Search Engine CX identifier.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <!-- 3. SUBSCRIPTIONS & QUOTAS -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-uppercase text-secondary small mb-3">
+                                    <i class="bi bi-award-fill text-warning me-1"></i> 3. Subscription Tier &amp; Rate Limits
+                                </h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="subscriptionTier" class="form-label fw-semibold">Subscription Tier</label>
+                                        <select class="form-select" id="subscriptionTier">
+                                            <option value="standard" {% if settings.subscription_tier == 'standard' or settings.subscription_tier == 'free' %}selected{% endif %}>Standard Developer Tier</option>
+                                            <option value="pro" {% if settings.subscription_tier == 'pro' %}selected{% endif %}>Pro Developer Tier (Higher Concurrency)</option>
+                                            <option value="enterprise" {% if settings.subscription_tier == 'enterprise' %}selected{% endif %}>Enterprise Tier (Custom Limits)</option>
+                                        </select>
+                                        <div class="form-text">Controls rate limit scheduling and SHA-256 caching policies.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="rateLimitRpm" class="form-label fw-semibold">Requests Per Minute (RPM) Ceiling</label>
+                                        <input type="number" class="form-control" id="rateLimitRpm" min="1" max="120" value="{{ settings.rate_limit_rpm or 15 }}">
+                                        <div class="form-text">Configured maximum concurrency: 15 RPM (Gemini baseline).</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 justify-content-end">
+                                <button type="button" class="btn btn-outline-primary px-4 py-2 fw-semibold d-flex align-items-center gap-2" id="validateSettingsBtn">
+                                    <i class="bi bi-shield-check"></i>
+                                    <span>Validate Credentials</span>
+                                </button>
+                                <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold d-flex align-items-center gap-2" id="saveSettingsBtn">
+                                    <i class="bi bi-check2-circle"></i>
+                                    <span>Save to Database</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- TAB 2: RAW CONFIG EDITOR -->
+                    <div class="tab-pane fade" id="env-pane" role="tabpanel">
+                        <div class="p-3 bg-light rounded-3 border mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold small text-dark"><i class="bi bi-terminal me-1"></i> Database Key-Value Configuration</span>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">SQLite Database Stored</span>
+                            </div>
+                            <textarea class="form-control font-monospace small bg-white" id="rawEnvEditor" rows="16" placeholder="# Key=Value pairs stored in SQLite database...">{{ settings.env_content or '' }}</textarea>
+                            <div class="form-text mt-2">
+                                Editing here directly updates your SQLite database configuration table. No local .env file on disk is needed!
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyToClipboard(document.getElementById('rawEnvEditor').value, 'Configuration copied!')">
+                                <i class="bi bi-clipboard"></i> Copy Config
+                            </button>
+                            <button type="button" class="btn btn-primary px-4 py-2 fw-semibold d-flex align-items-center gap-2" id="saveRawEnvBtn">
+                                <i class="bi bi-save"></i>
+                                <span>Save Config to Database</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Password visibility toggle
+    document.querySelectorAll('.toggle-pwd').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const input = document.getElementById(targetId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+            } else {
+                input.type = 'password';
+                btn.innerHTML = '<i class="bi bi-eye"></i>';
+            }
+        });
+    });
+
+    // Form submission (Save Settings to Database)
+    document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('saveSettingsBtn');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving to Database...';
+
+        const payload = {
+            gemini_api_key: document.getElementById('geminiKey').value,
+            groq_api_key: document.getElementById('groqKey').value,
+            openrouter_api_key: document.getElementById('openrouterKey').value,
+            google_cse_api_key: document.getElementById('googleCseKey').value,
+            google_cse_cx_id: document.getElementById('googleCseCx').value,
+            subscription_tier: document.getElementById('subscriptionTier').value,
+            rate_limit_rpm: parseInt(document.getElementById('rateLimitRpm').value) || 15
+        };
+
+        try {
+            const resp = await fetch('/api/v1/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (data.env_content) {
+                document.getElementById('rawEnvEditor').value = data.env_content;
+            }
+            showToast('Settings saved to database and runtime configuration updated!', 'success');
+        } catch (err) {
+            showToast('Failed to save settings: ' + err.message, 'danger');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check2-circle"></i> <span>Save to Database</span>';
+        }
+    });
+
+    // Save Raw .env file directly to Database
+    document.getElementById('saveRawEnvBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('saveRawEnvBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving .env...';
+
+        const content = document.getElementById('rawEnvEditor').value;
+
+        try {
+            const resp = await fetch('/api/v1/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ env_content: content })
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            showToast('.env file saved to database and synchronized successfully!', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+            showToast('Failed to update .env: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-save"></i> <span>Save .env to Database</span>';
+        }
+    });
+
+    // Validate Connectivity Button
+    document.getElementById('validateSettingsBtn').addEventListener('click', async () => {
+        const valBtn = document.getElementById('validateSettingsBtn');
+        const resultCard = document.getElementById('validationResultCard');
+        const detailsBody = document.getElementById('validationDetailsBody');
+        const badge = document.getElementById('overallStatusBadge');
+
+        valBtn.disabled = true;
+        valBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validating...';
+        resultCard.classList.remove('d-none');
+        badge.className = 'badge bg-warning text-dark';
+        badge.innerText = 'Testing...';
+        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, OpenRouter, and Google CSE endpoints...</div>';
+
+        const payload = {
+            gemini_api_key: document.getElementById('geminiKey').value,
+            groq_api_key: document.getElementById('groqKey').value,
+            openrouter_api_key: document.getElementById('openrouterKey').value,
+            google_cse_api_key: document.getElementById('googleCseKey').value,
+            google_cse_cx_id: document.getElementById('googleCseCx').value
+        };
+
+        try {
+            const resp = await fetch('/api/v1/settings/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+
+            let html = '<div class="row g-3">';
+            const providers = [
+                { name: 'Google Gemini 2.5 Flash', item: data.gemini, icon: 'bi-robot' },
+                { name: 'Groq Cloud Llama 3.3 70B', item: data.groq, icon: 'bi-lightning-charge' },
+                { name: 'OpenRouter Free Pool', item: data.openrouter, icon: 'bi-diagram-3' },
+                { name: 'Google Custom Search (X-Ray)', item: data.google_cse, icon: 'bi-search' }
+            ];
+
+            providers.forEach(p => {
+                let badgeClass = 'bg-secondary';
+                let iconClass = 'bi-dash-circle';
+                if (p.item.status === 'valid') {
+                    badgeClass = 'bg-success';
+                    iconClass = 'bi-check-circle-fill';
+                } else if (p.item.status === 'invalid') {
+                    badgeClass = 'bg-danger';
+                    iconClass = 'bi-exclamation-triangle-fill';
+                }
+
+                html += `
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded-3 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-semibold d-flex align-items-center gap-1">
+                                    <i class="bi ${p.icon} text-primary"></i> ${p.name}
+                                </span>
+                                <span class="badge ${badgeClass} text-uppercase"><i class="bi ${iconClass} me-1"></i>${p.item.status}</span>
+                            </div>
+                            <div class="small text-muted">${p.item.message}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            detailsBody.innerHTML = html;
+
+            if (data.overall_ready) {
+                badge.className = 'badge bg-success';
+                badge.innerText = 'Platform Ready';
+                showToast('Diagnostic complete: At least one AI provider is fully operational.', 'success');
+            } else {
+                badge.className = 'badge bg-danger';
+                badge.innerText = 'No AI Available';
+                showToast('Warning: None of the AI providers could be verified. Please check API keys.', 'warning');
+            }
+
+        } catch (err) {
+            badge.className = 'badge bg-danger';
+            badge.innerText = 'Error';
+            detailsBody.innerHTML = `<div class="alert alert-danger mb-0">Validation request failed: ${err.message}</div>`;
+        } finally {
+            valBtn.disabled = false;
+            valBtn.innerHTML = '<i class="bi bi-shield-check"></i> <span>Validate Credentials</span>';
+        }
+    });
+</script>
+{% endblock %}

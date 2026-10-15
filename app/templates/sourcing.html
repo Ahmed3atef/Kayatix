@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}LinkedIn X-Ray Sourcing - Kayatix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-xl-11">
+        
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1 small">
+                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">LinkedIn X-Ray Sourcing</li>
+                    </ol>
+                </nav>
+                <h3 class="fw-bold mb-0">Legal Candidate Sourcing (X-Ray Engine)</h3>
+                <p class="text-muted small mb-0">Programmatic discovery of publicly indexed LinkedIn profiles using Google Custom Search JSON API (Zero account bans).</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle p-2">
+                    <i class="bi bi-shield-check me-1"></i> Zero Ban Risk
+                </span>
+                <a href="/settings" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-gear"></i> Configure CSE Keys
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Left Search Filter Column -->
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-search text-success"></i> Sourcing Criteria
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="xraySearchForm">
+                            <div class="mb-3">
+                                <label for="xrayJobTitle" class="form-label fw-semibold">Target Job Title <span class="text-danger">*</span></label>
+                                <input class="form-control" type="text" id="xrayJobTitle" placeholder="e.g. Senior FastAPI Backend Engineer" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="xraySkills" class="form-label fw-semibold">Required Skills (Comma-separated) <span class="text-danger">*</span></label>
+                                <input class="form-control" type="text" id="xraySkills" placeholder="Python, PostgreSQL, Docker, AsyncIO" required>
+                                <div class="form-text">Up to 4 primary skills will be strictly incorporated into the boolean query.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="xrayLocation" class="form-label fw-semibold">Location <span class="text-danger">*</span></label>
+                                <input class="form-control" type="text" id="xrayLocation" placeholder="Cairo, Egypt or Remote" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="xrayMaxResults" class="form-label fw-semibold d-flex justify-content-between">
+                                    <span>Profiles to Retrieve</span>
+                                    <span id="xrayMaxResultsVal" class="badge bg-secondary">5</span>
+                                </label>
+                                <input type="range" class="form-range" id="xrayMaxResults" min="1" max="10" value="5" oninput="document.getElementById('xrayMaxResultsVal').innerText = this.value">
+                                <div class="form-text">Standard developer quota provides up to 100 queries/day on Google Custom Search JSON API.</div>
+                            </div>
+
+                            <!-- Live Dork Query Preview -->
+                            <div class="mb-3 p-3 bg-light rounded-3 border">
+                                <span class="text-muted small fw-bold d-block mb-1"><i class="bi bi-terminal me-1"></i> Boolean Dork Query Preview:</span>
+                                <code class="small text-break" id="dorkPreview">site:linkedin.com/in/ "Job Title" AND "Location" AND "Skills"</code>
+                            </div>
+
+                            <button type="submit" class="btn btn-success w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="searchXrayBtn">
+                                <i class="bi bi-binoculars-fill"></i>
+                                <span>Execute Google X-Ray Search</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Search Results Column -->
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-linkedin text-primary"></i> Discovered Public LinkedIn Candidates
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div id="xrayLoading" class="text-center py-5 d-none">
+                            <div class="spinner-border text-success" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+                            <h5 class="fw-bold mt-3 text-secondary">Querying Google Custom Search API</h5>
+                            <p class="text-muted small">Executing dork query &bull; Indexing matching candidate profiles...</p>
+                        </div>
+
+                        <div id="xrayEmptyState" class="text-center py-5 text-muted">
+                            <i class="bi bi-people-fill fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                            <h5 class="fw-semibold">No Candidates Discovered Yet</h5>
+                            <p class="small max-w-400 mx-auto">Fill in the role, location, and key skills on the left to programmatically discover public LinkedIn profiles without logging in or using a bot account.</p>
+                        </div>
+
+                        <div id="xrayResultsList" class="d-none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Live Dork Preview update
+    function updateDorkPreview() {
+        const title = document.getElementById('xrayJobTitle').value.trim() || 'Job Title';
+        const loc = document.getElementById('xrayLocation').value.trim() || 'Location';
+        const skillsRaw = document.getElementById('xraySkills').value.trim();
+        const skills = skillsRaw ? skillsRaw.split(',').map(s => `"${s.trim()}"`).join(' AND ') : '"Skill1" AND "Skill2"';
+
+        const dork = `site:linkedin.com/in/ "${title}" AND "${loc}" AND ${skills}`;
+        document.getElementById('dorkPreview').innerText = dork;
+    }
+
+    document.getElementById('xrayJobTitle').addEventListener('input', updateDorkPreview);
+    document.getElementById('xrayLocation').addEventListener('input', updateDorkPreview);
+    document.getElementById('xraySkills').addEventListener('input', updateDorkPreview);
+</script>
+{% endblock %}
+

@@ -1,0 +1,71 @@
+/* Custom styles for HR Copilot */
+
+:root {
+    --bs-primary-rgb: 13, 110, 253;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #2b3035;
+}
+
+.fs-7 {
+    font-size: 0.8rem;
+}
+
+/* Card aesthetics */
+.card {
+    transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important;
+}
+
+/* Code and monospaced snippets */
+code, pre {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Accordion modern styling */
+.accordion-button:not(.collapsed) {
+    background-color: #f8f9fa;
+    color: #0d6efd;
+    box-shadow: none;
+}
+
+.accordion-button:focus {
+    box-shadow: none;
+    border-color: rgba(13, 110, 253, 0.25);
+}
+
+/* Smooth drag-and-drop & inputs */
+.form-control:focus, .form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+/* Navbar active state */
+.navbar-nav .nav-link.active {
+    color: #fff !important;
+    border-bottom: 2px solid #0d6efd;
+}
+
+/* Badges styling */
+.badge {
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+/* Print styling for candidate reports */
+@media print {
+    nav, footer, .btn, .nav-tabs, #themeToggleBtn {
+        display: none !important;
+    }
+    body {
+        background-color: #fff !important;
+    }
+    .card {
+        box-shadow: none !important;
+        border: 1px solid #dee2e6 !important;
+    }
+}
