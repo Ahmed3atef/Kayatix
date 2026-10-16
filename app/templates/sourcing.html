@@ -93,13 +93,13 @@
                             <div class="border-top pt-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <span class="small fw-semibold text-muted text-uppercase">Programmatic Backend API</span>
-                                    <span class="badge bg-secondary-subtle text-secondary small">Requires API Key</span>
+                                    <span class="badge bg-secondary-subtle text-secondary small">Requires Legacy GCP Project</span>
                                 </div>
                                 <button type="submit" class="btn btn-outline-success w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="searchXrayBtn">
                                     <i class="bi bi-robot"></i>
                                     <span>Automated In-App Sourcing</span>
                                 </button>
-                                <div class="form-text small">Fetches and indexes candidate profiles directly into Kayatix via backend JSON API.</div>
+                                <div class="form-text small">Notice: Google deprecated this JSON API for new projects. Use the 1-Click Search above or CSE Widget tab for guaranteed zero-setup results.</div>
                             </div>
                         </form>
                     </div>
@@ -154,7 +154,7 @@
                                     This interactive Google Programmable Search engine runs on your Search Engine ID (<code>{{ settings.google_cse_cx_id }}</code>) directly in the browser &mdash; <strong>100% free, unlimited, with zero Google Cloud API keys needed!</strong>
                                 </div>
                                 <script async src="https://cse.google.com/cse.js?cx={{ settings.google_cse_cx_id }}"></script>
-                                <div class="gcse-search"></div>
+                                <div class="gcse-search" data-gname="sourcingSearch"></div>
                             </div>
                         </div>
                         {% endif %}
@@ -201,6 +201,41 @@
     document.getElementById('copyDorkBtn')?.addEventListener('click', () => {
         const dork = document.getElementById('dorkPreview')?.innerText || '';
         copyToClipboard(dork, 'Boolean Dork query copied to clipboard!');
+    });
+
+    // Interactive CSE Widget Execution
+    window.triggerWidgetSearch = function() {
+        const dork = document.getElementById('dorkPreview')?.innerText;
+        if (!dork) return;
+        try {
+            if (window.google && window.google.search && window.google.search.cse) {
+                const el = google.search.cse.element.getElement('sourcingSearch') || 
+                           Object.values(google.search.cse.element.getAllElements() || {})[0];
+                if (el && typeof el.execute === 'function') {
+                    el.execute(dork);
+                }
+            }
+        } catch (e) {
+            console.warn('CSE widget execution:', e);
+        }
+    };
+
+    window.switchToCSEWidget = function() {
+        const widgetTab = document.getElementById('widget-tab');
+        if (widgetTab) {
+            const bsTab = bootstrap.Tab.getOrCreateInstance(widgetTab);
+            bsTab.show();
+            setTimeout(window.triggerWidgetSearch, 350);
+        } else {
+            const googleBtn = document.getElementById('directGoogleSearchBtn');
+            if (googleBtn && googleBtn.href) {
+                window.open(googleBtn.href, '_blank');
+            }
+        }
+    };
+
+    document.getElementById('widget-tab')?.addEventListener('shown.bs.tab', () => {
+        setTimeout(window.triggerWidgetSearch, 300);
     });
 
     // Initialize links on load

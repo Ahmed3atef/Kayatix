@@ -1,4 +1,5 @@
 import logging
+import os
 from collections.abc import AsyncGenerator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -21,6 +22,13 @@ def normalize_database_url(raw_url: str | None) -> str:
     if not raw_url or not raw_url.strip():
         return DEFAULT_SQLITE_URL
     url = raw_url.strip()
+
+    # Prevent pytest temporary paths from leaking into runtime
+    if "PYTEST_CURRENT_TEST" not in os.environ and "/tmp" in url and ("pytest" in url or "test_switch" in url):
+        logger.warning(
+            f"[Database] Temporary test path detected in DATABASE_URL ('{url}'). Falling back to '{DEFAULT_SQLITE_URL}'."
+        )
+        return DEFAULT_SQLITE_URL
 
     if url.startswith("sqlite:///") and not url.startswith("sqlite+aiosqlite:///"):
         return url.replace("sqlite:///", "sqlite+aiosqlite:///")
@@ -52,6 +60,20 @@ def normalize_database_url(raw_url: str | None) -> str:
     return url
 
 
+def mask_database_url(raw_url: str | None) -> str:
+    """Masks database password in connection string for secure display in UI and logs."""
+    if not raw_url or not raw_url.strip():
+        return "Not Configured"
+    try:
+        parsed = urlparse(raw_url.strip())
+        if parsed.password:
+            netloc = parsed.netloc.replace(f":{parsed.password}@", ":••••••••@")
+            return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+    except Exception:
+        pass
+    return raw_url.strip()
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -72,32 +94,6 @@ async def switch_database_engine(new_url: str) -> str:
     new_engine = create_async_engine(normalized, echo=False)
     async with new_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-        def migrate_schema(sync_conn):
-            try:
-                sync_conn.exec_driver_sql(
-                    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS database_url VARCHAR(1024)"
-                )
-                sync_conn.exec_driver_sql(
-                    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS evaluation_mode VARCHAR(50) DEFAULT 'llm_cascade'"
-                )
-            except Exception:
-                try:
-                    res = sync_conn.exec_driver_sql("PRAGMA table_info(user_settings)").fetchall()
-                    existing_cols = {row[1] for row in res}
-                    if existing_cols:
-                        if "database_url" not in existing_cols:
-                            sync_conn.exec_driver_sql(
-                                "ALTER TABLE user_settings ADD COLUMN database_url VARCHAR(1024)"
-                            )
-                        if "evaluation_mode" not in existing_cols:
-                            sync_conn.exec_driver_sql(
-                                "ALTER TABLE user_settings ADD COLUMN evaluation_mode VARCHAR(50) DEFAULT 'llm_cascade'"
-                            )
-                except Exception:
-                    pass
-
-        await conn.run_sync(migrate_schema)
 
     try:
         await old_engine.dispose()

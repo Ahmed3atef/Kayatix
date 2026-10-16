@@ -32,31 +32,45 @@ To enable automated in-app JSON parsing of candidate search results:
 2. Select your Google Cloud Project in the top project selector.
 3. Click the blue **Enable** button.
 
-### Step 3: Configure API Key Restrictions (Fixing `API_KEY_SERVICE_BLOCKED`)
-If you see the error:
-> `Requests to Custom Search are blocked (API_KEY_SERVICE_BLOCKED / PERMISSION_DENIED)`
+### Step 3: Google's New Project Restrictions (`PERMISSION_DENIED`)
 
-Your Google Cloud API Key has restrictive security rules that block `customsearch.googleapis.com`. To fix this:
-
-1. Open the [Google Cloud Console Credentials](https://console.cloud.google.com/apis/credentials).
-2. Click on the API Key you pasted into Kayatix Settings.
-3. Scroll down to the **API restrictions** section:
-   - **Option A (Secure / Recommended)**: Keep **"Restrict key"** selected. In the **Select APIs** dropdown, search for **Custom Search API** and check its box. Ensure both your Gemini API and Custom Search API are checked if sharing the key.
-   - **Option B (Unrestricted)**: Change the selection to **"Don't restrict key"**.
-4. Click **Save** at the bottom.
-5. Wait **1 to 3 minutes** for Google's edge servers to propagate the change.
+> [!WARNING]
+> **Google Cloud Custom Search JSON API Deprecation Notice**
+> Google has permanently **closed the legacy Custom Search JSON API (`customsearch.googleapis.com`) to newly created Google Cloud projects**.
+> 
+> If you see the following response in your server logs or UI:
+> ```json
+> {
+>   "error": {
+>     "code": 403,
+>     "message": "This project does not have the access to Custom Search JSON API.",
+>     "status": "PERMISSION_DENIED"
+>   }
+> }
+> ```
+> This indicates Google's backend has restricted the JSON API to grandfathered legacy projects only. Even with the API enabled in Google Cloud Console and an unrestricted API key, Google rejects calls from new projects.
 
 ---
 
-## 🚀 Zero-Setup Alternatives (No Google Cloud Key Needed!)
+## 🚀 Recommended Sourcing Methods (100% Free & Zero Key Required!)
 
-If you do not have a Google Cloud Console account or your API key is blocked:
+Kayatix was specifically built with two built-in alternatives that bypass Google Cloud API keys and restrictions completely:
 
-1. **1-Click Direct Google Search**:
-   - On the Sourcing page (`/sourcing`), fill in the role, location, and skills.
-   - Click the blue **"Open Direct Search on Google"** button.
-   - Google opens in a new tab with the exact pre-composed Boolean dork query with zero API keys required.
-2. **Embedded CSE Search Widget**:
-   - Click the **"CSE Widget (Zero Keys)"** tab.
-   - Search LinkedIn profiles interactively using Google's hosted search widget.
+### 1. 1-Click Search on Google (0 Setup)
+- On the **Sourcing** page (`/sourcing`), enter your job title, location, and key skills.
+- Click the blue **"Open 1-Click Search on Google"** button.
+- Google immediately opens in a new tab with your exact Boolean dork query (e.g. `site:linkedin.com/in/ "Job Title" AND "Location" AND "Skill 1"`).
+- **Benefits**: Zero Google Cloud setup, zero quotas, zero billing, zero 403 errors, and 100% access to live LinkedIn candidates.
+
+### 2. Free Google CSE Browser Widget
+- On the **Sourcing** page, click the **"CSE Widget (Zero Key)"** tab.
+- This tab loads Google's interactive search widget directly inside your browser using your Search Engine ID (`cx`).
+- **Benefits**: 100% free, unlimited, and runs directly in the client without needing Google Cloud API keys or backend permissions.
+
+### 3. Fixing `API_KEY_SERVICE_BLOCKED` (For Existing / Legacy Projects)
+If you are using an existing GCP project that has access to Custom Search API, but your key has API restrictions:
+1. Open [Google Cloud Credentials](https://console.cloud.google.com/apis/credentials).
+2. Select your API Key.
+3. Under **API restrictions**, choose **"Don't restrict key"** or ensure **"Custom Search API"** is checked.
+4. Click **Save** and allow 2-3 minutes for propagation.
 

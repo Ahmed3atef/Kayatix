@@ -13,6 +13,13 @@ function showToast(message, type = 'primary') {
     toast.show();
 }
 
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
 // Copy to Clipboard Utility
 function copyToClipboard(text, successMsg = 'Copied to clipboard!') {
     navigator.clipboard.writeText(text).then(() => {
@@ -384,51 +391,82 @@ if (xrayForm) {
             list.classList.remove('d-none');
             showToast(`Found ${profiles.length} LinkedIn candidate profiles!`, 'success');
         } catch (err) {
-            const errStr = (err.message || '').toLowerCase();
-            if (errStr.includes('credentials') || errStr.includes('not configured') || errStr.includes('400')) {
-                const dorkQuery = `site:linkedin.com/in/ "${payload.job_title}" AND "${payload.location}" AND ${payload.required_skills.map(s => `"${s}"`).join(' AND ')}`;
-                const googleSearchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(dorkQuery);
-                const linkedinKeywords = [payload.job_title, payload.location, ...payload.required_skills.slice(0, 3)].join(' ');
-                const linkedinSearchUrl = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(linkedinKeywords);
+            const errStr = (err.message || '');
+            const errLower = errStr.toLowerCase();
+            const dorkQuery = `site:linkedin.com/in/ "${payload.job_title}" AND "${payload.location}" AND ${payload.required_skills.map(s => `"${s}"`).join(' AND ')}`;
+            const googleSearchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(dorkQuery);
+            const linkedinKeywords = [payload.job_title, payload.location, ...payload.required_skills.slice(0, 3)].join(' ');
+            const linkedinSearchUrl = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(linkedinKeywords);
 
-                list.innerHTML = `
-                    <div class="alert alert-warning border border-warning-subtle rounded-4 p-4 shadow-sm">
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <i class="bi bi-info-circle-fill text-warning fs-4"></i>
-                            <h5 class="fw-bold mb-0 text-dark">Google Cloud API Key Not Configured</h5>
-                        </div>
-                        <p class="small text-muted mb-3">
-                            Google Cloud Console requires an API Key for <strong>backend automated in-app JSON scraping</strong>.
-                            <br>
-                            <strong>Good news: You do NOT need Google Cloud Console to source candidates!</strong>
-                            Choose one of the 1-click zero-setup options below:
-                        </p>
-                        <div class="d-flex flex-wrap gap-2 mb-3">
-                            <a href="${googleSearchUrl}" target="_blank" class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-2">
-                                <i class="bi bi-google"></i>
-                                <span>Open Direct Search on Google (0 Setup)</span>
-                                <i class="bi bi-box-arrow-up-right small"></i>
-                            </a>
-                            <a href="${linkedinSearchUrl}" target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
-                                <i class="bi bi-linkedin text-primary"></i>
-                                <span>Open in LinkedIn Search</span>
-                                <i class="bi bi-box-arrow-up-right small"></i>
-                            </a>
-                            <button type="button" class="btn btn-outline-dark btn-sm" onclick="document.getElementById('widget-tab')?.click()">
-                                <i class="bi bi-window me-1"></i> Use CSE Widget (Zero Keys)
-                            </button>
-                        </div>
-                        <div class="small text-secondary border-top pt-2 mt-2">
-                            Want automated JSON parsing inside the app? <a href="/settings" class="text-primary fw-semibold">Add a Google Cloud API Key in Settings</a>.
-                        </div>
+            let headerTitle = "Google Cloud Sourcing Notice";
+            let explanation = "";
+
+            if (errLower.includes('does not have the access') || errLower.includes('permission_denied') || errLower.includes('restricted') || errLower.includes('closed')) {
+                headerTitle = "Google Closed Custom Search JSON API for New Projects";
+                explanation = `
+                    <p class="small text-muted mb-2">
+                        Google Cloud has permanently <strong>restricted and deprecated programmatic access</strong> to the legacy Custom Search JSON API (<code>customsearch.googleapis.com</code>) for all newly created Google Cloud projects.
+                    </p>
+                    <div class="p-2 bg-body-tertiary rounded text-danger small font-monospace mb-3 border">
+                        403 Forbidden: "This project does not have the access to Custom Search JSON API."
                     </div>
+                    <p class="small text-muted mb-3">
+                        Even with the API enabled in Google Cloud Console, Google blocks automated in-app JSON calls for new accounts.
+                        <br>
+                        <strong class="text-success"><i class="bi bi-check-circle-fill me-1"></i> Good news: You do NOT need any API key to source candidates!</strong> Use our 1-click zero-setup alternatives below:
+                    </p>
                 `;
-                list.classList.remove('d-none');
-                showToast('Tip: Click "Open Direct Search on Google" above (0 setup needed!)', 'warning');
+            } else if (errLower.includes('credentials') || errLower.includes('not configured')) {
+                headerTitle = "Google Cloud API Key Not Configured";
+                explanation = `
+                    <p class="small text-muted mb-3">
+                        Google Cloud API credentials are not configured in Settings.
+                        <br>
+                        <strong>You do NOT need Google Cloud Console to source candidates!</strong> Choose one of the 1-click zero-setup options below:
+                    </p>
+                `;
             } else {
-                emptyState.classList.remove('d-none');
-                showToast('X-Ray search error: ' + err.message, 'danger');
+                headerTitle = "Sourcing Engine Notice";
+                explanation = `
+                    <p class="small text-danger mb-2">${escapeHtml(errStr)}</p>
+                    <p class="small text-muted mb-3">
+                        You can immediately source candidates using our direct 1-click search or the browser-embedded CSE widget:
+                    </p>
+                `;
             }
+
+            list.innerHTML = `
+                <div class="alert alert-warning border border-warning-subtle rounded-4 p-4 shadow-sm">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-shield-exclamation text-warning fs-4"></i>
+                        <h5 class="fw-bold mb-0 text-dark">${headerTitle}</h5>
+                    </div>
+                    ${explanation}
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <a href="${googleSearchUrl}" target="_blank" class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-2">
+                            <i class="bi bi-google"></i>
+                            <span>Open 1-Click Search on Google (0 Setup)</span>
+                            <i class="bi bi-box-arrow-up-right small"></i>
+                        </a>
+                        <button type="button" class="btn btn-outline-success btn-sm fw-semibold d-flex align-items-center gap-1" onclick="switchToCSEWidget()">
+                            <i class="bi bi-window me-1"></i> Use Free CSE Widget (No Key Needed)
+                        </button>
+                        <a href="${linkedinSearchUrl}" target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
+                            <i class="bi bi-linkedin text-primary"></i>
+                            <span>Open in LinkedIn Search</span>
+                            <i class="bi bi-box-arrow-up-right small"></i>
+                        </a>
+                    </div>
+                    <div class="small text-secondary border-top pt-2 mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span class="text-truncate max-w-400">Query: <code class="small">${escapeHtml(dorkQuery)}</code></span>
+                        <a href="/documentation/05-linkedin-xray-sourcing" class="text-decoration-none small text-primary">
+                            <i class="bi bi-book me-1"></i> Read Sourcing Docs
+                        </a>
+                    </div>
+                </div>
+            `;
+            list.classList.remove('d-none');
+            showToast('Google API restricted. Please use 1-Click Google Search or CSE Widget below!', 'warning');
         } finally {
             loading.classList.add('d-none');
             btn.disabled = false;

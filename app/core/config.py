@@ -3,9 +3,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "AI HR Copilot & Talent Intelligence API"
+    PROJECT_NAME: str = "Kayatix - A.Y.A.T. Engine"
     VERSION: str = "1.0.0"
-    DATABASE_URL: str = "sqlite+aiosqlite:///./hr_copilot.db"
+    DATABASE_URL: str = ""
 
     # AI Provider Keys
     GEMINI_API_KEY: Optional[str] = None

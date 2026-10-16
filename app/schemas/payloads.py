@@ -53,7 +53,8 @@ class UserSettingsResponse(BaseModel):
     evaluation_mode: str = "llm_cascade"
     rate_limit_rpm: int = 15
     database_url: Optional[str] = None
-    database_type: str = "sqlite"
+    masked_database_url: Optional[str] = None
+    database_type: str = "postgresql"
     env_content: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -72,7 +73,7 @@ class UserSettingsUpdateRequest(BaseModel):
 
 
 class DatabaseValidationRequest(BaseModel):
-    database_url: str
+    database_url: Optional[str] = None
 
 
 class DatabaseValidationResponse(BaseModel):

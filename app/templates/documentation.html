@@ -3,8 +3,6 @@
 {% block title %}{{ doc.title }} | Kayatix Documentation{% endblock %}
 
 {% block head %}
-<!-- Marked.js for fast, clean GFM Markdown parsing -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <!-- Highlight.js for code syntax highlighting -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
@@ -155,14 +153,9 @@
 
             <!-- Rendered Markdown Body -->
             <div class="card-body p-4 p-md-5">
-                <!-- Hidden raw markdown container -->
-                <textarea id="rawMarkdownSource" class="d-none">{{ doc.content }}</textarea>
-                
-                <!-- Output container rendered dynamically by marked.js -->
+                <!-- Output container rendered server-side directly -->
                 <div id="docsRenderedOutput" class="docs-content text-body-emphasis">
-                    <div class="text-center py-5 text-muted">
-                        <span class="spinner-border spinner-border-sm me-2"></span> Rendering documentation...
-                    </div>
+                    {{ doc.html_content | safe }}
                 </div>
             </div>
 
@@ -204,57 +197,10 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Configure marked.js with highlight.js syntax highlighting
-    const rawMarkdown = document.getElementById('rawMarkdownSource')?.value || '';
-    const outputContainer = document.getElementById('docsRenderedOutput');
-
-    if (rawMarkdown && outputContainer && typeof marked !== 'undefined') {
-        marked.setOptions({
-            gfm: true,
-            breaks: true,
-            highlight: function(code, lang) {
-                if (typeof hljs !== 'undefined') {
-                    const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-                    return hljs.highlight(code, { language }).value;
-                }
-                return code;
-            }
-        });
-
-        // Custom renderer for GitHub-style callout alerts (> [!NOTE], > [!WARNING], etc.)
-        const renderer = new marked.Renderer();
-        const originalBlockquote = renderer.blockquote.bind(renderer);
-        renderer.blockquote = function(quote) {
-            const rawText = quote.text || quote;
-            if (rawText.includes('[!NOTE]')) {
-                const cleaned = rawText.replace(/\[!NOTE\]/g, '').trim();
-                return `<div class="alert alert-info border-info-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-info-circle-fill"></i> Note</h6><div>${cleaned}</div></div>`;
-            }
-            if (rawText.includes('[!WARNING]')) {
-                const cleaned = rawText.replace(/\[!WARNING\]/g, '').trim();
-                return `<div class="alert alert-warning border-warning-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-exclamation-triangle-fill"></i> Warning</h6><div>${cleaned}</div></div>`;
-            }
-            if (rawText.includes('[!TIP]')) {
-                const cleaned = rawText.replace(/\[!TIP\]/g, '').trim();
-                return `<div class="alert alert-success border-success-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-lightbulb-fill"></i> Tip</h6><div>${cleaned}</div></div>`;
-            }
-            if (rawText.includes('[!IMPORTANT]')) {
-                const cleaned = rawText.replace(/\[!IMPORTANT\]/g, '').trim();
-                return `<div class="alert alert-primary border-primary-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-star-fill"></i> Important</h6><div>${cleaned}</div></div>`;
-            }
-            return originalBlockquote(quote);
-        };
-
-        marked.use({ renderer });
-        outputContainer.innerHTML = marked.parse(rawMarkdown);
-
-        // Enhance tables with bootstrap table classes
-        outputContainer.querySelectorAll('table').forEach(tbl => {
-            tbl.classList.add('table', 'table-bordered', 'table-hover', 'my-3');
-            const wrapper = document.createElement('div');
-            wrapper.className = 'table-responsive';
-            tbl.parentNode.insertBefore(wrapper, tbl);
-            wrapper.appendChild(tbl);
+    // 1. Syntax highlight all code blocks if highlight.js is loaded
+    if (typeof hljs !== 'undefined') {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
         });
     }
 
@@ -277,4 +223,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endblock %}
+
 

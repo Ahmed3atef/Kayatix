@@ -30,59 +30,29 @@ BASE_DIR = Path(__file__).resolve().parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize SQLite/PostgreSQL tables automatically on startup
+    # Initialize database tables automatically on startup (SQLAlchemy checks if tables exist)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        # Self-healing column migration for both PostgreSQL and SQLite
-        def migrate_schema(sync_conn):
-            # Try PostgreSQL syntax first
-            try:
-                sync_conn.exec_driver_sql(
-                    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS database_url VARCHAR(1024)"
-                )
-                sync_conn.exec_driver_sql(
-                    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS evaluation_mode VARCHAR(50) DEFAULT 'llm_cascade'"
-                )
-            except Exception:
-                # SQLite fallback
-                try:
-                    res = sync_conn.exec_driver_sql("PRAGMA table_info(user_settings)").fetchall()
-                    existing_cols = {row[1] for row in res}
-                    if existing_cols:
-                        if "database_url" not in existing_cols:
-                            sync_conn.exec_driver_sql(
-                                "ALTER TABLE user_settings ADD COLUMN database_url VARCHAR(1024)"
-                            )
-                        if "evaluation_mode" not in existing_cols:
-                            sync_conn.exec_driver_sql(
-                                "ALTER TABLE user_settings ADD COLUMN evaluation_mode VARCHAR(50) DEFAULT 'llm_cascade'"
-                            )
-                except Exception:
-                    pass
-
-        await conn.run_sync(migrate_schema)
-
-    # Sync UserSettings from SQLite DB into runtime in-memory settings
+    # Sync UserSettings from active database into runtime in-memory settings
     try:
+        from app.services.settings_service import get_or_create_user_settings
         async with AsyncSessionLocal() as session:
-            stmt = select(UserSettings)
-            user_settings = (await session.execute(stmt)).scalars().first()
-            if user_settings:
-                if user_settings.gemini_api_key:
-                    settings.GEMINI_API_KEY = user_settings.gemini_api_key
-                if user_settings.groq_api_key:
-                    settings.GROQ_API_KEY = user_settings.groq_api_key
-                if user_settings.openrouter_api_key:
-                    settings.OPENROUTER_API_KEY = user_settings.openrouter_api_key
-                if user_settings.google_cse_api_key:
-                    settings.GOOGLE_CSE_API_KEY = user_settings.google_cse_api_key
-                if user_settings.google_cse_cx_id:
-                    settings.GOOGLE_CSE_CX_ID = user_settings.google_cse_cx_id
-                if user_settings.evaluation_mode:
-                    settings.EVALUATION_MODE = user_settings.evaluation_mode
-    except Exception:
-        pass
+            await get_or_create_user_settings(session)
+
+            logger.info("=" * 60)
+            logger.info(" Kayatix A.Y.A.T. Engine - Active Configuration")
+            logger.info(f" -> Database Backend : {settings.DATABASE_URL}")
+            logger.info(f" -> Google Gemini    : {'[ACTIVE]' if settings.GEMINI_API_KEY else '[NOT SET]'}")
+            logger.info(f" -> Groq Cloud       : {'[ACTIVE]' if settings.GROQ_API_KEY else '[NOT SET]'}")
+            logger.info(f" -> OpenRouter       : {'[ACTIVE]' if settings.OPENROUTER_API_KEY else '[NOT SET]'}")
+            logger.info(f" -> Google CSE Key   : {'[ACTIVE]' if settings.GOOGLE_CSE_API_KEY else '[NOT SET]'}")
+            logger.info(f" -> Google CSE CX    : {'[ACTIVE]' if settings.GOOGLE_CSE_CX_ID else '[NOT SET]'}")
+            logger.info(f" -> Evaluation Mode  : {settings.EVALUATION_MODE}")
+            logger.info(f" -> Subscription     : {settings.SUBSCRIPTION_TIER.upper()}")
+            logger.info("=" * 60)
+    except Exception as e:
+        logger.error(f"[Startup] Error reading settings from database: {e}", exc_info=True)
 
     yield
 

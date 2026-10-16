@@ -57,17 +57,27 @@ async def execute_linkedin_xray_search(req: XRaySearchRequest) -> List[XRayProfi
         if resp.status_code != 200:
             err_text = resp.text
             logger.error(f"[X-Ray Sourcing] Google Search API error (HTTP {resp.status_code}): {err_text}")
+            if "does not have the access to Custom Search JSON API" in err_text:
+                logger.warning(
+                    "[X-Ray Sourcing] Google Cloud restricted the legacy Custom Search JSON API for newly created projects. "
+                    "Use the 1-Click Direct Google Search button or the free CSE Widget."
+                )
+                raise ValueError(
+                    "Google has restricted the legacy Custom Search JSON API for newly created Google Cloud projects "
+                    "('This project does not have the access to Custom Search JSON API'). "
+                    "Google no longer grants new projects access to this legacy API. "
+                    "Please use the '1-Click Search on Google' button or the 'CSE Widget' tab to source candidates instantly with zero API keys."
+                )
             if "API_KEY_SERVICE_BLOCKED" in err_text or "PERMISSION_DENIED" in err_text:
                 logger.warning(
                     "[X-Ray Sourcing] Note: Your GCP API key has restrictions blocking 'customsearch.googleapis.com'. "
                     "Enable 'Custom Search API' in Google Cloud Console or use the 1-Click Direct Google Search button."
                 )
-                raise RuntimeError(
-                    f"Google Search API error: Requests to Custom Search are blocked (API_KEY_SERVICE_BLOCKED). "
-                    "Please enable the 'Custom Search API' in your Google Cloud Console for project restrictions, "
-                    "or click the '1-Click Direct Google Search' button on this page to search instantly without an API key."
+                raise ValueError(
+                    "Google Search API error: Requests to Custom Search are blocked (PERMISSION_DENIED / API_KEY_SERVICE_BLOCKED). "
+                    "Please check your Google Cloud Console project restrictions, or use the '1-Click Search on Google' button or 'CSE Widget' tab."
                 )
-            raise RuntimeError(f"Google Search API error: {err_text}")
+            raise ValueError(f"Google Search API error: {err_text}")
         data = resp.json()
 
     results: List[XRayProfileItem] = []

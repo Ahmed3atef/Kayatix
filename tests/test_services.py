@@ -177,5 +177,26 @@ async def test_execute_linkedin_xray_search_api_error():
         mock_resp.text = "Quota exceeded for Google Custom Search"
         mock_get.return_value = mock_resp
 
-        with pytest.raises(RuntimeError, match="Google Search API error"):
+        with pytest.raises(ValueError, match="Google Search API error"):
+            await execute_linkedin_xray_search(req)
+
+
+@pytest.mark.asyncio
+async def test_execute_linkedin_xray_search_google_new_project_restriction():
+    req = XRaySearchRequest(
+        job_title="ERPNext Developer",
+        required_skills=["Frappe", "Python"],
+        location="Cairo",
+    )
+    with (
+        patch.object(settings, "GOOGLE_CSE_API_KEY", "valid_key"),
+        patch.object(settings, "GOOGLE_CSE_CX_ID", "valid_cx"),
+        patch("httpx.AsyncClient.get") as mock_get,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.text = '{"error": {"code": 403, "message": "This project does not have the access to Custom Search JSON API.", "status": "PERMISSION_DENIED"}}'
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(ValueError, match="Google has restricted the legacy Custom Search JSON API"):
             await execute_linkedin_xray_search(req)

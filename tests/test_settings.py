@@ -167,42 +167,70 @@ async def test_validate_database_api_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_settings_page_renders_database_engine_section(client):
-    """Verifies that the Settings UI displays database engine switcher and controls."""
+async def test_settings_page_renders_cleanly_without_database_switcher(client):
+    """Verifies that the Settings UI does not expose database switcher controls."""
     resp = await client.get("/settings")
     assert resp.status_code == 200
     html = resp.text
-    assert "Database Engine Backend" in html
-    assert "id=\"databaseUrlInput\"" in html
-    assert "id=\"testDbConnBtn\"" in html
-    assert "id=\"dbChoiceSqlite\"" in html
-    assert "id=\"dbChoicePostgres\"" in html
+    # Database switcher must be completely absent from User Settings
+    assert "id=\"databaseUrlInput\"" not in html
+    assert "id=\"dbChoiceSqlite\"" not in html
+    assert "id=\"dbChoicePostgres\"" not in html
+    assert "Reset to Default SQLite" not in html
+    # Ensure primary settings sections remain intact
+    assert "Multi-Provider AI Credentials" in html
+    assert "Google Custom Search" in html
+    assert "Evaluation Strategy" in html
 
 
 @pytest.mark.asyncio
-async def test_database_switch_safely(db_session, tmp_path):
-    """Verifies that switching database engine at runtime executes safely with zero errors."""
-    import os
-    from app.core.database import switch_database_engine
-    
-    new_db_file = tmp_path / "test_switch.db"
-    new_db_url = f"sqlite+aiosqlite:///{new_db_file}"
-    
+async def test_database_url_managed_via_server_not_user_settings(db_session):
+    """Verifies that user settings cannot arbitrarily switch server database engine."""
+    from app.core.database import mask_database_url
+
+    # Updating settings only affects credentials and configuration
     update_req = UserSettingsUpdateRequest(
-        database_url=new_db_url,
-        gemini_api_key="switch_test_gemini",
+        gemini_api_key="new_server_test_key",
+        subscription_tier="enterprise",
     )
-    
-    # Execute switch
     res = await update_user_settings(update_req, db_session)
-    
-    assert res.database_url == new_db_url
-    assert res.database_type == "sqlite"
     assert res.gemini_api_key_configured is True
-    assert os.path.exists(new_db_file)
-    
-    # Restore test database engine
-    from tests.conftest import TEST_DATABASE_URL
-    await switch_database_engine(TEST_DATABASE_URL)
+    assert res.subscription_tier == "enterprise"
+
+    # Verify password masking
+    raw_pg = "postgresql+asyncpg://admin_user:secret_password_123@db.host.com:5432/proddb?ssl=require"
+    masked = mask_database_url(raw_pg)
+    assert "secret_password_123" not in masked
+    assert "••••••••" in masked
+    assert "admin_user" in masked
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_user_settings_reads_existing_or_creates_defaults(db_session):
+    """Verifies that get_or_create_user_settings reads existing DB record if present, or creates defaults if missing."""
+    from app.services.settings_service import get_or_create_user_settings
+    from app.models.domain import UserSettings
+    from sqlalchemy import select, delete
+
+    # Ensure clean state in test DB
+    await db_session.execute(delete(UserSettings))
+    await db_session.commit()
+
+    # 1. Fresh database -> creates record with defaults
+    created = await get_or_create_user_settings(db_session)
+    assert created is not None
+    assert created.subscription_tier == "standard"
+    assert created.evaluation_mode == "llm_cascade"
+
+    # 2. Modify existing record in database
+    created.gemini_api_key = "custom_saved_gemini_key"
+    created.subscription_tier = "enterprise"
+    await db_session.commit()
+
+    # 3. Subsequent call -> reads existing record without wiping it
+    fetched = await get_or_create_user_settings(db_session)
+    assert fetched.gemini_api_key == "custom_saved_gemini_key"
+    assert fetched.subscription_tier == "enterprise"
+
 
 

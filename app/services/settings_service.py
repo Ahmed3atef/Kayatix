@@ -14,7 +14,6 @@ from app.core import database as db_core
 from app.core.database import (
     DEFAULT_SQLITE_URL,
     normalize_database_url,
-    switch_database_engine,
 )
 from app.models.domain import JobTemplate, UserSettings
 from app.schemas.payloads import (
@@ -57,10 +56,12 @@ DEFAULT_RATE_LIMIT_RPM = 15
 
 def generate_config_text(record: UserSettings) -> str:
     """Generates standardized key-value configuration text from database record."""
-    active_db = record.database_url or settings.DATABASE_URL
+    from app.core.database import mask_database_url
+    active_db = mask_database_url(record.database_url or settings.DATABASE_URL)
     return (
         f'PROJECT_NAME="{record.project_name or DEFAULT_PROJECT_NAME}"\n'
         f'VERSION="{record.version or DEFAULT_VERSION}"\n'
+        f'# DATABASE_URL is managed securely via server environment variables / .env\n'
         f'DATABASE_URL="{active_db}"\n\n'
         f'# AI Provider Keys\n'
         f'GEMINI_API_KEY="{record.gemini_api_key or ""}"\n'
@@ -94,6 +95,9 @@ def parse_config_text(text: str) -> dict:
 def _persist_database_url_to_env(new_url: str):
     """Safely updates or inserts DATABASE_URL in .env file on disk."""
     try:
+        # Never overwrite .env during test execution or with temporary test databases
+        if "PYTEST_CURRENT_TEST" in os.environ or "/tmp" in new_url or "pytest" in new_url or "test_switch" in new_url:
+            return
         env_path = ".env"
         env_lines = []
         if os.path.exists(env_path):
@@ -116,13 +120,18 @@ def _persist_database_url_to_env(new_url: str):
 
 
 async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
-    """Retrieves user settings row from active DB or initializes it with complete out-of-the-box defaults on first run."""
+    """
+    Retrieves user settings row from active DB or initializes it with complete out-of-the-box defaults on first run.
+    - If settings exist in the database, they are strictly read and synchronized into runtime memory.
+    - If any key is missing in the database but configured in environment/defaults, it is backfilled.
+    - If no settings record exists at all, creates one with system defaults and any configured env values.
+    """
     stmt = select(UserSettings).limit(1)
     result = await db.execute(stmt)
     user_settings = result.scalar_one_or_none()
 
     if not user_settings:
-        logger.info("[Database] Initializing fresh UserSettings table record with system defaults.")
+        logger.info("[Database] No settings record found in active database. Initializing fresh UserSettings record with system defaults.")
         user_settings = UserSettings(
             project_name=DEFAULT_PROJECT_NAME,
             version=DEFAULT_VERSION,
@@ -140,6 +149,32 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         db.add(user_settings)
         await db.commit()
         await db.refresh(user_settings)
+        logger.info("[Database] Successfully created fresh UserSettings record.")
+    else:
+        # Settings record exists: check if any missing keys can be backfilled from settings/env
+        dirty = False
+        if not user_settings.gemini_api_key and settings.GEMINI_API_KEY:
+            user_settings.gemini_api_key = settings.GEMINI_API_KEY
+            dirty = True
+        if not user_settings.groq_api_key and settings.GROQ_API_KEY:
+            user_settings.groq_api_key = settings.GROQ_API_KEY
+            dirty = True
+        if not user_settings.openrouter_api_key and settings.OPENROUTER_API_KEY:
+            user_settings.openrouter_api_key = settings.OPENROUTER_API_KEY
+            dirty = True
+        if not user_settings.google_cse_api_key and settings.GOOGLE_CSE_API_KEY:
+            user_settings.google_cse_api_key = settings.GOOGLE_CSE_API_KEY
+            dirty = True
+        if not user_settings.google_cse_cx_id and settings.GOOGLE_CSE_CX_ID:
+            user_settings.google_cse_cx_id = settings.GOOGLE_CSE_CX_ID
+            dirty = True
+        if not user_settings.database_url or user_settings.database_url != settings.DATABASE_URL:
+            user_settings.database_url = settings.DATABASE_URL
+            dirty = True
+
+        if dirty:
+            await db.commit()
+            await db.refresh(user_settings)
 
     # Sync runtime memory configuration from database
     if user_settings.gemini_api_key:
@@ -158,20 +193,25 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         settings.EVALUATION_MODE = user_settings.evaluation_mode
     if user_settings.rate_limit_rpm:
         settings.RATE_LIMIT_RPM = user_settings.rate_limit_rpm
-    if user_settings.database_url:
-        settings.DATABASE_URL = user_settings.database_url
+    if user_settings.project_name:
+        settings.PROJECT_NAME = user_settings.project_name
+    if user_settings.version:
+        settings.VERSION = user_settings.version
 
     return user_settings
 
 
 async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
-    """Returns configuration overview, secret status, and raw configuration representation."""
+    """Returns configuration overview, secret status, and raw configuration representation with masked credentials."""
+    from app.core.database import mask_database_url
     record = await get_or_create_user_settings(db)
     env_str = record.env_content or generate_config_text(record)
-    active_db = record.database_url or settings.DATABASE_URL
+    active_db = record.database_url or settings.DATABASE_URL or ""
     db_type = "postgresql" if "postgres" in active_db.lower() else "sqlite"
 
     return UserSettingsResponse(
+        project_name=record.project_name or DEFAULT_PROJECT_NAME,
+        version=record.version or DEFAULT_VERSION,
         gemini_api_key_configured=bool(record.gemini_api_key),
         groq_api_key_configured=bool(record.groq_api_key),
         openrouter_api_key_configured=bool(record.openrouter_api_key),
@@ -181,6 +221,7 @@ async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
         evaluation_mode=record.evaluation_mode or DEFAULT_EVALUATION_MODE,
         rate_limit_rpm=record.rate_limit_rpm or DEFAULT_RATE_LIMIT_RPM,
         database_url=active_db,
+        masked_database_url=mask_database_url(active_db),
         database_type=db_type,
         env_content=env_str,
         updated_at=record.updated_at.isoformat() if record.updated_at else None,
@@ -190,7 +231,7 @@ async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
 async def update_user_settings(
     req: UserSettingsUpdateRequest, db: AsyncSession
 ) -> UserSettingsResponse:
-    """Persists updated API keys and configuration directly into SQLite database."""
+    """Persists updated API keys and configuration directly into active database."""
     record = await get_or_create_user_settings(db)
 
     # If raw config text is passed, parse and update fields
@@ -225,7 +266,7 @@ async def update_user_settings(
                 pass
         record.env_content = req.env_content.strip()
 
-    # Otherwise process individual structured fields
+    # Process individual structured fields
     if req.gemini_api_key is not None:
         record.gemini_api_key = req.gemini_api_key.strip() or None
         settings.GEMINI_API_KEY = record.gemini_api_key
@@ -251,81 +292,8 @@ async def update_user_settings(
         record.rate_limit_rpm = req.rate_limit_rpm
         settings.RATE_LIMIT_RPM = record.rate_limit_rpm
 
-    # Check if database_url is provided in raw env or structured request
-    target_db_url = None
-    if req.env_content is not None and req.env_content.strip():
-        parsed = parse_config_text(req.env_content)
-        if "DATABASE_URL" in parsed and parsed["DATABASE_URL"].strip():
-            target_db_url = parsed["DATABASE_URL"].strip()
-    if req.database_url is not None and req.database_url.strip():
-        target_db_url = req.database_url.strip()
-
-    if target_db_url:
-        normalized_target = normalize_database_url(target_db_url)
-        current_normalized = normalize_database_url(record.database_url or settings.DATABASE_URL)
-        if normalized_target != current_normalized:
-            logger.info(f"[Database Switcher] Switching database backend from '{current_normalized}' to '{normalized_target}'...")
-            # Validate target connection first
-            val = await validate_database_connection(normalized_target)
-            if val.status != "valid":
-                logger.error(f"[Database Switcher] Validation failed for {normalized_target}: {val.message}")
-                raise HTTPException(status_code=400, detail=f"Cannot switch database: {val.message}")
-
-            saved_settings = {
-                "project_name": record.project_name or DEFAULT_PROJECT_NAME,
-                "version": record.version or DEFAULT_VERSION,
-                "gemini_api_key": record.gemini_api_key,
-                "groq_api_key": record.groq_api_key,
-                "openrouter_api_key": record.openrouter_api_key,
-                "google_cse_api_key": record.google_cse_api_key,
-                "google_cse_cx_id": record.google_cse_cx_id,
-                "subscription_tier": record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER,
-                "evaluation_mode": record.evaluation_mode or DEFAULT_EVALUATION_MODE,
-                "rate_limit_rpm": record.rate_limit_rpm or DEFAULT_RATE_LIMIT_RPM,
-                "database_url": normalized_target,
-            }
-
-            # Switch live engine safely
-            await switch_database_engine(normalized_target)
-
-            # Populate target database safely with new session
-            async with db_core.AsyncSessionLocal() as new_session:
-                new_rec_res = await new_session.execute(select(UserSettings).limit(1))
-                new_rec = new_rec_res.scalar_one_or_none()
-                if not new_rec:
-                    new_rec = UserSettings(**saved_settings)
-                    new_rec.env_content = generate_config_text(new_rec)
-                    new_session.add(new_rec)
-                else:
-                    for k, v in saved_settings.items():
-                        setattr(new_rec, k, v)
-                    new_rec.env_content = generate_config_text(new_rec)
-
-                # Initialize default templates if target database has none
-                tpl_res = await new_session.execute(select(JobTemplate).limit(1))
-                if not tpl_res.scalar_one_or_none():
-                    for t in DEFAULT_JOB_TEMPLATES:
-                        new_session.add(JobTemplate(title=t["title"], category=t["category"], description=t["description"]))
-
-                await new_session.commit()
-                await new_session.refresh(new_rec)
-
-                # Sync in-memory settings
-                if new_rec.gemini_api_key: settings.GEMINI_API_KEY = new_rec.gemini_api_key
-                if new_rec.groq_api_key: settings.GROQ_API_KEY = new_rec.groq_api_key
-                if new_rec.openrouter_api_key: settings.OPENROUTER_API_KEY = new_rec.openrouter_api_key
-                if new_rec.google_cse_api_key: settings.GOOGLE_CSE_API_KEY = new_rec.google_cse_api_key
-                if new_rec.google_cse_cx_id: settings.GOOGLE_CSE_CX_ID = new_rec.google_cse_cx_id
-                if new_rec.evaluation_mode: settings.EVALUATION_MODE = new_rec.evaluation_mode
-                settings.DATABASE_URL = normalized_target
-
-                _persist_database_url_to_env(normalized_target)
-                logger.info(f"[Database Switcher] Successfully switched and initialized database backend: {normalized_target}")
-
-                # Return directly from new session without touching the disposed old session
-                return await get_settings_summary(new_session)
-
-    # Standard update on current database session (no DB switch)
+    # DATABASE_URL is managed strictly via server environment variables / .env.
+    # The active database session is used directly.
     record.env_content = generate_config_text(record)
     await db.commit()
     await db.refresh(record)
@@ -333,23 +301,26 @@ async def update_user_settings(
     return await get_settings_summary(db)
 
 
-async def validate_database_connection(raw_url: str) -> DatabaseValidationResponse:
-    """Validates connectivity to a PostgreSQL or SQLite database link."""
-    if not raw_url or not raw_url.strip():
+async def validate_database_connection(raw_url: Optional[str] = None) -> DatabaseValidationResponse:
+    """Validates connectivity to a PostgreSQL or database link."""
+    target_url = raw_url.strip() if raw_url and raw_url.strip() else settings.DATABASE_URL
+    if not target_url or not target_url.strip():
         return DatabaseValidationResponse(
             status="invalid",
-            message="Database connection link cannot be empty.",
+            message="Database connection link is not configured. Set DATABASE_URL in .env or server environment.",
             database_type="unknown",
         )
-    normalized = normalize_database_url(raw_url)
+    from app.core.database import mask_database_url
+    normalized = normalize_database_url(target_url)
     if not (normalized.startswith("postgresql+asyncpg://") or normalized.startswith("sqlite+aiosqlite://")):
         return DatabaseValidationResponse(
             status="invalid",
-            message=f"Unsupported database scheme. Connection URL must start with postgresql:// or sqlite:///",
+            message="Unsupported database scheme. Connection URL must start with postgresql:// or sqlite:///",
             database_type="unknown",
         )
     db_type = "postgresql" if "postgres" in normalized.lower() else "sqlite"
     start_time = time.perf_counter()
+    temp_engine = None
     try:
         temp_engine = create_async_engine(normalized, echo=False)
         async with temp_engine.connect() as conn:
@@ -366,18 +337,17 @@ async def validate_database_connection(raw_url: str) -> DatabaseValidationRespon
                 )
                 tables = [r[0] for r in res.fetchall()]
 
-        await temp_engine.dispose()
         latency = round((time.perf_counter() - start_time) * 1000, 2)
         target_name = (
             "Neon PostgreSQL Cloud"
-            if "neon.tech" in raw_url.lower()
-            else ("PostgreSQL Database" if db_type == "postgresql" else "SQLite Embedded Database")
+            if "neon.tech" in target_url.lower()
+            else ("PostgreSQL Server" if db_type == "postgresql" else "Embedded Database")
         )
         return DatabaseValidationResponse(
             status="valid",
             message=f"Connected successfully to {target_name} ({latency}ms).",
             database_type=db_type,
-            normalized_url=normalized,
+            normalized_url=mask_database_url(normalized),
             latency_ms=latency,
             tables_found=tables,
         )
@@ -389,6 +359,12 @@ async def validate_database_connection(raw_url: str) -> DatabaseValidationRespon
             database_type=db_type,
             latency_ms=latency,
         )
+    finally:
+        if temp_engine:
+            try:
+                await temp_engine.dispose()
+            except Exception:
+                pass
 
 
 async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatus:

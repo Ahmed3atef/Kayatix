@@ -50,6 +50,37 @@ def get_all_documentation_pages() -> List[Dict[str, Any]]:
     return pages
 
 
+def render_markdown_to_html(content: str) -> str:
+    """Renders markdown content to clean HTML server-side using markdown-it with callout alert support."""
+    try:
+        from markdown_it import MarkdownIt
+        parser = MarkdownIt("commonmark").enable(["table", "strikethrough"])
+        html = parser.render(content)
+
+        # Transform GitHub style callouts inside blockquotes (> [!NOTE], > [!WARNING], etc.)
+        callout_map = [
+            (r"\[!NOTE\]", "alert alert-info border-info-subtle shadow-sm my-3", "bi bi-info-circle-fill", "Note"),
+            (r"\[!WARNING\]", "alert alert-warning border-warning-subtle shadow-sm my-3", "bi bi-exclamation-triangle-fill", "Warning"),
+            (r"\[!TIP\]", "alert alert-success border-success-subtle shadow-sm my-3", "bi bi-lightbulb-fill", "Tip"),
+            (r"\[!IMPORTANT\]", "alert alert-primary border-primary-subtle shadow-sm my-3", "bi bi-star-fill", "Important"),
+        ]
+        for tag, cls, icon, label in callout_map:
+            pattern = rf"<blockquote>\s*<p>\s*{tag}\s*(.*?)</p>\s*</blockquote>"
+            replacement = (
+                rf'<div class="{cls}"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1">'
+                rf'<i class="{icon}"></i> {label}</h6><div>\1</div></div>'
+            )
+            html = re.sub(pattern, replacement, html, flags=re.DOTALL)
+
+        # Add Bootstrap table classes
+        html = html.replace("<table>", '<div class="table-responsive my-3"><table class="table table-bordered table-hover">')
+        html = html.replace("</table>", '</table></div>')
+        return html
+    except Exception as e:
+        import html as html_lib
+        return f"<pre class='p-3 bg-light rounded'>{html_lib.escape(content)}</pre>"
+
+
 def get_documentation_page(slug: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Retrieves the content, title, and pagination metadata for a specific documentation page.
@@ -85,6 +116,7 @@ def get_documentation_page(slug: Optional[str] = None) -> Optional[Dict[str, Any
         "title": active_page["title"],
         "relative_path": active_page["relative_path"],
         "content": content,
+        "html_content": render_markdown_to_html(content),
         "all_pages": pages,
         "prev_page": prev_page,
         "next_page": next_page,

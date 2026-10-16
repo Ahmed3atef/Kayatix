@@ -18,10 +18,6 @@
                 <p class="text-muted small mb-0">Configure your multi-provider AI credentials, Google X-Ray keys, rate limits, and subscription preferences. All settings are persisted directly in the database.</p>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span id="activeDbBadge" class="badge {% if settings.database_type == 'postgresql' %}bg-primary-subtle text-primary border border-primary-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} p-2 shadow-sm" title="Active Database Backend">
-                    <i class="bi {% if settings.database_type == 'postgresql' %}bi-cloud-check{% else %}bi-hdd{% endif %} me-1"></i>
-                    {% if settings.database_type == 'postgresql' %}PostgreSQL / Neon{% else %}SQLite Local{% endif %}
-                </span>
                 <span id="dbSyncStatusBadge" class="badge bg-success-subtle text-success border border-success-subtle p-2 transition-all shadow-sm" title="Database Synchronization Status">
                     <i class="bi bi-database-check me-1"></i> Saved
                 </span>
@@ -228,57 +224,6 @@
                                 </div>
                             </div>
 
-                            <!-- 4. DATABASE ENGINE & CLOUD INTEGRATION -->
-                            <div class="mb-4">
-                                <h6 class="fw-bold text-uppercase text-secondary small mb-3">
-                                    <i class="bi bi-database-fill-gear text-primary me-1"></i> 4. Database Engine Backend (SQLite &harr; PostgreSQL)
-                                </h6>
-                                <div class="card border bg-light-subtle rounded-3 p-3 mb-3">
-                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                                        <div>
-                                            <span class="fw-semibold">Storage Engine Mode:</span>
-                                            <div class="btn-group ms-2" role="group" aria-label="Database engine toggle">
-                                                <input type="radio" class="btn-check" name="dbEngineChoice" id="dbChoiceSqlite" autocomplete="off" {% if settings.database_type != 'postgresql' %}checked{% endif %}>
-                                                <label class="btn btn-sm btn-outline-secondary" for="dbChoiceSqlite">
-                                                    <i class="bi bi-hdd me-1"></i> Local SQLite
-                                                </label>
-
-                                                <input type="radio" class="btn-check" name="dbEngineChoice" id="dbChoicePostgres" autocomplete="off" {% if settings.database_type == 'postgresql' %}checked{% endif %}>
-                                                <label class="btn btn-sm btn-outline-primary" for="dbChoicePostgres">
-                                                    <i class="bi bi-cloud-arrow-up me-1"></i> Cloud PostgreSQL (Neon / Supabase / RDS)
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="useSqliteDefaultBtn">
-                                            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to Default SQLite
-                                        </button>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <label for="databaseUrlInput" class="form-label fw-semibold mb-0">
-                                                Database Connection String (URI)
-                                            </label>
-                                            <span class="small text-muted">Supports Neon, Supabase, AWS RDS, Docker Postgres, or SQLite</span>
-                                        </div>
-                                        <div class="input-group">
-                                            <span class="input-group-text"><i class="bi bi-link-45deg text-muted"></i></span>
-                                            <input type="text" class="form-control font-monospace" id="databaseUrlInput" 
-                                                placeholder="postgresql://user:password@ep-sample-pooler.c-7.us-east-2.aws.neon.tech/dbname?sslmode=require&channel_binding=require" 
-                                                value="{{ settings.database_url or 'sqlite+aiosqlite:///./hr_copilot.db' }}">
-                                            <button class="btn btn-outline-primary fw-semibold" type="button" id="testDbConnBtn">
-                                                <i class="bi bi-activity me-1"></i> Test Connection
-                                            </button>
-                                        </div>
-                                        <div class="form-text">
-                                            Paste your PostgreSQL connection link (e.g. Neon link with <code>?sslmode=require&amp;channel_binding=require</code>). Kayatix automatically normalizes the async driver (<code>postgresql+asyncpg://</code>), adapts SSL parameters, builds tables, and migrates existing settings seamlessly.
-                                        </div>
-                                    </div>
-
-                                    <!-- Live DB Diagnostic Output -->
-                                    <div id="dbTestResultBox" class="alert d-none mb-0 py-2 px-3 small rounded-3"></div>
-                                </div>
-                            </div>
 
                             <div class="d-flex flex-wrap gap-2 justify-content-end">
                                 <button type="button" class="btn btn-outline-primary px-4 py-2 fw-semibold d-flex align-items-center gap-2" id="validateSettingsBtn">
@@ -371,12 +316,12 @@
                     <div class="tab-pane fade" id="env-pane" role="tabpanel">
                         <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="fw-bold small text-body-emphasis"><i class="bi bi-terminal me-1"></i> Database Key-Value Configuration</span>
-                                <span class="badge bg-success-subtle text-success border border-success-subtle">SQLite Database Stored</span>
+                                <span class="fw-bold small text-body-emphasis"><i class="bi bi-terminal me-1"></i> Database Configuration Overview</span>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Database Stored</span>
                             </div>
-                            <textarea class="form-control font-monospace small" id="rawEnvEditor" rows="16" placeholder="# Key=Value pairs stored in SQLite database...">{{ settings.env_content or '' }}</textarea>
+                            <textarea class="form-control font-monospace small" id="rawEnvEditor" rows="16" placeholder="# Key=Value pairs stored in database...">{{ settings.env_content or '' }}</textarea>
                             <div class="form-text mt-2">
-                                Editing here directly updates your SQLite database configuration table. No local .env file on disk is needed!
+                                Editing here directly updates your active database configuration table.
                             </div>
                         </div>
 
@@ -562,8 +507,7 @@
             google_cse_cx_id: document.getElementById('googleCseCx').value,
             evaluation_mode: document.getElementById('evaluationMode').value,
             subscription_tier: document.getElementById('subscriptionTier').value,
-            rate_limit_rpm: parseInt(document.getElementById('rateLimitRpm').value) || 15,
-            database_url: document.getElementById('databaseUrlInput')?.value?.trim() || null
+            rate_limit_rpm: parseInt(document.getElementById('rateLimitRpm').value) || 15
         };
 
         try {
@@ -579,18 +523,6 @@
             const data = await resp.json();
             if (data.env_content) {
                 document.getElementById('rawEnvEditor').value = data.env_content;
-            }
-            if (data.database_type) {
-                const activeDbBadge = document.getElementById('activeDbBadge');
-                if (activeDbBadge) {
-                    if (data.database_type === 'postgresql') {
-                        activeDbBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle p-2 shadow-sm';
-                        activeDbBadge.innerHTML = '<i class="bi bi-cloud-check me-1"></i> PostgreSQL / Neon';
-                    } else {
-                        activeDbBadge.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle p-2 shadow-sm';
-                        activeDbBadge.innerHTML = '<i class="bi bi-hdd me-1"></i> SQLite Local';
-                    }
-                }
             }
             initialSettingsSnapshot = getSettingsSnapshot();
             setSyncStatus(true);
@@ -716,102 +648,7 @@
         }
     });
 
-    // -------------------------------------------------------------
-    // Database Storage Engine Client-Side Logic
-    // -------------------------------------------------------------
-    const dbUrlInput = document.getElementById('databaseUrlInput');
-    const dbRadioSqlite = document.getElementById('dbChoiceSqlite');
-    const dbRadioPostgres = document.getElementById('dbChoicePostgres');
-    const defaultSqliteUrl = 'sqlite+aiosqlite:///./hr_copilot.db';
 
-    dbRadioSqlite?.addEventListener('change', () => {
-        if (dbRadioSqlite.checked && dbUrlInput) {
-            dbUrlInput.value = defaultSqliteUrl;
-            checkModifications();
-        }
-    });
-
-    dbRadioPostgres?.addEventListener('change', () => {
-        if (dbRadioPostgres.checked && dbUrlInput) {
-            if (dbUrlInput.value.includes('sqlite') || !dbUrlInput.value.trim()) {
-                dbUrlInput.value = '';
-                dbUrlInput.placeholder = 'postgresql://user:password@ep-sample-pooler.c-7.us-east-2.aws.neon.tech/dbname?sslmode=require&channel_binding=require';
-                dbUrlInput.focus();
-            }
-            checkModifications();
-        }
-    });
-
-    document.getElementById('useSqliteDefaultBtn')?.addEventListener('click', () => {
-        if (dbUrlInput) {
-            dbUrlInput.value = defaultSqliteUrl;
-            if (dbRadioSqlite) dbRadioSqlite.checked = true;
-            checkModifications();
-            showToast('Switched URL to default local SQLite.', 'info');
-        }
-    });
-
-    dbUrlInput?.addEventListener('input', () => {
-        const val = dbUrlInput.value.toLowerCase();
-        if (val.includes('postgres') || val.includes('neon.tech') || val.includes('supabase')) {
-            if (dbRadioPostgres) dbRadioPostgres.checked = true;
-        } else if (val.includes('sqlite')) {
-            if (dbRadioSqlite) dbRadioSqlite.checked = true;
-        }
-        checkModifications();
-    });
-
-    // Test Database Connection Button
-    document.getElementById('testDbConnBtn')?.addEventListener('click', async () => {
-        const testBtn = document.getElementById('testDbConnBtn');
-        const box = document.getElementById('dbTestResultBox');
-        const targetUrl = dbUrlInput?.value?.trim() || '';
-
-        if (!targetUrl) {
-            box.className = 'alert alert-warning mb-0 py-2 px-3 small rounded-3';
-            box.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Please provide a database connection string to test.';
-            box.classList.remove('d-none');
-            return;
-        }
-
-        testBtn.disabled = true;
-        testBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
-        box.className = 'alert alert-info mb-0 py-2 px-3 small rounded-3';
-        box.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Testing live connection and verifying schema...';
-        box.classList.remove('d-none');
-
-        try {
-            const resp = await fetch('/api/v1/settings/validate-database', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ database_url: targetUrl })
-            });
-            const data = await resp.json();
-            if (resp.ok && data.status === 'valid') {
-                box.className = 'alert alert-success mb-0 py-2 px-3 small rounded-3';
-                const tablesText = (data.tables_found && data.tables_found.length > 0)
-                    ? `Found tables: <code>${data.tables_found.join(', ')}</code>`
-                    : 'Schema ready (tables will be verified or initialized)';
-                box.innerHTML = `
-                    <div class="fw-semibold text-success d-flex align-items-center gap-1">
-                        <i class="bi bi-check-circle-fill"></i> Connected successfully to ${data.database_type.toUpperCase()}!
-                    </div>
-                    <div class="text-muted mt-1 small">
-                        Latency: <strong>${data.latency_ms} ms</strong> &bull; ${tablesText}
-                    </div>
-                `;
-            } else {
-                box.className = 'alert alert-danger mb-0 py-2 px-3 small rounded-3';
-                box.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i> <strong>Connection Failed:</strong> ${data.message || 'Unable to connect to database'}`;
-            }
-        } catch (err) {
-            box.className = 'alert alert-danger mb-0 py-2 px-3 small rounded-3';
-            box.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i> <strong>Validation error:</strong> ${err.message}`;
-        } finally {
-            testBtn.disabled = false;
-            testBtn.innerHTML = '<i class="bi bi-activity me-1"></i> Test Connection';
-        }
-    });
 
     // -------------------------------------------------------------
     // Job Description Templates Client-Side Logic

@@ -21,13 +21,14 @@
 <body class="d-flex flex-column min-vh-100">
 
     <!-- Top Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="/">
-                <span class="badge bg-primary rounded-circle p-2">
-                    <i class="bi bi-robot fs-5"></i>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm py-2">
+        <div class="container-fluid px-3 px-xl-4">
+            <a class="navbar-brand d-flex align-items-center gap-2 fw-bold text-nowrap py-1 me-3" href="/">
+                <span class="badge bg-primary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                    <i class="bi bi-robot fs-6"></i>
                 </span>
-                <span>Kayatix <span class="text-white-50 small ms-2 d-none d-lg-inline fs-7">(Automated Yield for Applicant &amp; Talent)</span></span>
+                <span class="fs-5 text-white">Kayatix</span>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-7 d-none d-xl-inline-block">A.Y.A.T.</span>
             </a>
             
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,47 +36,47 @@
             </button>
 
             <div class="collapse navbar-collapse" id="mainNavbar">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 align-items-lg-center gap-1">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == '/' %}active fw-semibold{% endif %}" href="/">
-                            <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                        <a class="nav-link text-nowrap {% if request.url.path == '/' %}active{% endif %}" href="/">
+                            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == '/screener' %}active fw-semibold{% endif %}" href="/screener">
-                            <i class="bi bi-file-earmark-person me-1"></i> Resume Screener
+                        <a class="nav-link text-nowrap {% if request.url.path == '/screener' %}active{% endif %}" href="/screener">
+                            <i class="bi bi-file-earmark-person"></i> <span>Screener</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == '/portfolio' %}active fw-semibold{% endif %}" href="/portfolio">
-                            <i class="bi bi-globe me-1"></i> Portfolio Analyzer
+                        <a class="nav-link text-nowrap {% if request.url.path == '/portfolio' %}active{% endif %}" href="/portfolio">
+                            <i class="bi bi-globe"></i> <span>Portfolios</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == '/sourcing' %}active fw-semibold{% endif %}" href="/sourcing">
-                            <i class="bi bi-search me-1"></i> LinkedIn X-Ray
+                        <a class="nav-link text-nowrap {% if request.url.path == '/sourcing' %}active{% endif %}" href="/sourcing">
+                            <i class="bi bi-search"></i> <span>X-Ray Sourcing</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == '/history' %}active fw-semibold{% endif %}" href="/history">
-                            <i class="bi bi-clock-history me-1"></i> History &amp; Cache
+                        <a class="nav-link text-nowrap {% if request.url.path == '/history' %}active{% endif %}" href="/history">
+                            <i class="bi bi-clock-history"></i> <span>History</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.url.path.startswith('/documentation') %}active fw-semibold{% endif %}" href="/documentation">
-                            <i class="bi bi-book me-1"></i> Documentation
+                        <a class="nav-link text-nowrap {% if request.url.path.startswith('/documentation') %}active{% endif %}" href="/documentation">
+                            <i class="bi bi-book"></i> <span>Docs</span>
                         </a>
                     </li>
                 </ul>
 
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 text-nowrap pt-2 pt-lg-0">
                     <a href="/settings" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1 {% if request.url.path == '/settings' %}active{% endif %}">
-                        <i class="bi bi-gear-fill"></i> Settings
+                        <i class="bi bi-gear-fill"></i> <span>Settings</span>
                     </a>
                     <a href="/docs" target="_blank" class="btn btn-outline-info btn-sm d-flex align-items-center gap-1">
-                        <i class="bi bi-file-code"></i> API Docs
+                        <i class="bi bi-file-code"></i> <span>API Docs</span>
                     </a>
-                    <button class="btn btn-sm btn-outline-secondary" id="themeToggleBtn" title="Toggle Light/Dark Theme">
+                    <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center" id="themeToggleBtn" title="Toggle Light/Dark Theme" style="width: 32px; height: 32px; padding: 0;">
                         <i class="bi bi-moon-stars" id="themeIcon"></i>
                     </button>
                 </div>
