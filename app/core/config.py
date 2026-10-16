@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     # AI & Cloud OCR Keys
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
-    OPENROUTER_API_KEY: Optional[str] = None
-    MISTRAL_API_KEY: Optional[str] = None
+    OLLAMA_API_KEY: Optional[str] = None
+    OLLAMA_BASE_URL: str = "https://ollama.com/v1"
     LLAMA_CLOUD_API_KEY: Optional[str] = None
 
     # Google X-Ray Search Keys (LinkedIn Legal Sourcing)

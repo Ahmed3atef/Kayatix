@@ -1,13 +1,13 @@
 """
-Services package: Cloud PDF OCR, web scraping, sourcing, and AI engines.
+Services package: Cloud PDF OCR, local PDF parsing, web scraping, sourcing, and AI engines.
 """
 
 from app.services.pdf_service import (
     encode_pdf_to_base64,
     extract_pdf_content,
     extract_text_with_gemini_vision,
-    extract_text_with_mistral_ocr,
     extract_text_with_llamaparse,
+    extract_text_with_pypdf,
 )
 from app.services.ai_evaluator import (
     evaluate_candidate_pipeline,
@@ -22,8 +22,8 @@ __all__ = [
     "encode_pdf_to_base64",
     "extract_pdf_content",
     "extract_text_with_gemini_vision",
-    "extract_text_with_mistral_ocr",
     "extract_text_with_llamaparse",
+    "extract_text_with_pypdf",
     "evaluate_candidate_pipeline",
     "HRAnalysisResult",
     "InterviewQuestion",

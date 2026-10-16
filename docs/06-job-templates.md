@@ -64,7 +64,7 @@ Kayatix manages default job templates, system presets, and RAG evaluation instru
   - Reverse sync endpoints (`/export`) allow exporting database updates back into the JSON files with a fresh timestamp.
 
 * **Database-Driven AI Evaluation**:
-  - Before making any LLM API calls (Gemini, Groq, Mistral, OpenRouter), the AI engine queries the database (`ai_instructions` table) for the active RAG prompt template and Bar Raiser system instruction.
+  - Before making any LLM API calls (Gemini, Groq, Ollama Cloud), the AI engine queries the database (`ai_instructions` table) for the active RAG prompt template and Bar Raiser system instruction.
   - This allows real-time dynamic customization of prompts and evaluation rubrics without redeploying code.
 
 * **API Endpoints**:

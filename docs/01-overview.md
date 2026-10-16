@@ -11,7 +11,7 @@ Welcome to **Kayatix**, the **A.Y.A.T. Engine** (*Automated Yield for Applicant 
 1. **Resume Screener (`/screener`)**:
    - Accepts candidate PDF resumes and LinkedIn "Save to PDF" exports.
    - Cleans and normalizes text, stripping token waste.
-   - Directly feeds content into real Cloud LLMs (Gemini / Groq / OpenRouter) for merit-based scoring (0-100%).
+   - Directly feeds content into real Cloud LLMs (Gemini / Groq / Ollama Cloud) for merit-based scoring (0-100%).
    - Generates 5–7 tailored technical and behavioral interview questions targeting verified gaps.
 
 2. **Portfolio Analyzer (`/portfolio`)**:
@@ -25,9 +25,9 @@ Welcome to **Kayatix**, the **A.Y.A.T. Engine** (*Automated Yield for Applicant 
    - Includes 1-Click zero-setup Google search and embedded CSE search widgets.
 
 4. **Multi-Provider AI Cascade**:
-   - Primary: **Google Gemini** (`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`).
-   - Secondary: **Groq Cloud LPUs** (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b`, `llama-3.3-70b-versatile`).
-   - Tertiary: **OpenRouter** fallback.
+   - Primary: **Google Gemini** (`gemini-2.5-flash`, `gemini-2.5-flash-lite`).
+   - Secondary: **Groq Cloud LPUs** (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`).
+   - Tertiary: **Ollama Cloud** fallback (`beam`, `gemma4:31b`, `gpt-oss:120b`, `gpt-oss:20b`, `nemotron-3-nano:30b`, `nemotron-3-super`, `nemotron-3-ultra`).
    - Automatic model failover on rate limits (429) or high-demand spikes (503).
 
 5. **Universal Database Backend**:

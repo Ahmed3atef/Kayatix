@@ -83,27 +83,36 @@ async def evaluate_candidate_pipeline(
     portfolio_markdown: str = "",
     gemini_api_key: Optional[str] = None,
     groq_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
+    ollama_api_key: Optional[str] = None,
+    ollama_base_url: Optional[str] = None,
     llama_api_key: Optional[str] = None,
 ) -> Tuple[HRAnalysisResult, str]:
     """
-    1. Attempts Single-Shot Native PDF Multimodal Evaluation on Gemini 2.5 Flash (1 API call total).
-    2. On rate-limit/failure, runs Cloud OCR (Gemini Flash-Lite / Mistral / LlamaParse)
-       and evaluates the resulting Markdown on Groq (Llama 3.3 70B) or OpenRouter.
+    1. Attempts Single-Shot Native PDF Multimodal Evaluation on Gemini Flash (1 API call total).
+    2. On rate-limit/failure, runs Cloud OCR (Gemini Vision / LlamaParse / pypdf)
+       and evaluates the resulting Markdown on Groq (Llama 3.3 70B) or Ollama Cloud Models.
     Returns: Tuple[HRAnalysisResult, pipeline_used]
     """
     gemini_key = (gemini_api_key or settings.GEMINI_API_KEY or "").strip()
     groq_key = (groq_api_key or settings.GROQ_API_KEY or "").strip()
-    openrouter_key = (openrouter_api_key or settings.OPENROUTER_API_KEY or "").strip()
-    mistral_key = (mistral_api_key or settings.MISTRAL_API_KEY or "").strip()
+    ollama_key = (ollama_api_key or settings.OLLAMA_API_KEY or "").strip()
+    ollama_url = (ollama_base_url or settings.OLLAMA_BASE_URL or "https://ollama.com/v1").rstrip("/")
     llama_key = (llama_api_key or settings.LLAMA_CLOUD_API_KEY or "").strip()
 
-    # PATH A: Single-Shot Native PDF Vision Evaluation via Gemini 2.5 Flash
+    # PATH A: Single-Shot Native PDF Vision Evaluation via modern Gemini Flash models
     if gemini_key:
         try:
-            logger.info("[AI Router] Attempting Single-Shot PDF Evaluation via Gemini 2.5 Flash...")
             client = genai.Client(api_key=gemini_key)
+            preferred_models = [
+                "gemini-3.6-flash",
+                "gemini-3.8-flash",
+                "gemini-3.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-flash-latest",
+                "gemini-flash-lite-latest",
+                "gemini-2.5-flash",
+                "gemini-1.5-flash",
+            ]
             prompt = f"""
             Evaluate the attached PDF Resume against the following Job Description.
             Additional Candidate Portfolio Data:
@@ -112,30 +121,44 @@ async def evaluate_candidate_pipeline(
             === JOB DESCRIPTION ===
             {job_description}
             """
-            response = await asyncio.to_thread(
-                client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=[
-                    types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                    prompt,
-                ],
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                    response_schema=HRAnalysisResult,
-                    temperature=0.1,
-                ),
-            )
-            result = HRAnalysisResult.model_validate_json(response.text)
-            return result, "gemini-2.5-flash-single-shot"
-        except Exception as e:
-            logger.warning(f"[AI Router] Gemini 2.5 Flash single-shot failed ({e}). Falling back to Cloud OCR + Text LLM...")
 
-    # PATH B: Cloud OCR Extraction -> Groq / OpenRouter Text Evaluation
+            for model_name in preferred_models:
+                try:
+                    logger.info(f"[AI Router] Attempting Single-Shot PDF Evaluation via Gemini model '{model_name}'...")
+                    response = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=model_name,
+                        contents=[
+                            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                            prompt,
+                        ],
+                        config=types.GenerateContentConfig(
+                            system_instruction=SYSTEM_INSTRUCTION,
+                            response_mime_type="application/json",
+                            response_schema=HRAnalysisResult,
+                            temperature=0.1,
+                        ),
+                    )
+                    if response and response.text:
+                        result = HRAnalysisResult.model_validate_json(response.text)
+                        return result, f"{model_name}-single-shot"
+                except Exception as e:
+                    err_msg = str(e)
+                    logger.warning(f"[AI Router] Gemini single-shot failed on '{model_name}': {err_msg}")
+                    # If 404 (model deprecated for this key) or 503 (service unavailable), failover to next model
+                    if "404" in err_msg or "not_found" in err_msg.lower() or "503" in err_msg or "unavailable" in err_msg.lower():
+                        continue
+                    # If 429 (rate limit quota hit), stop hammering Gemini and fall back to PATH B
+                    if "429" in err_msg or "quota" in err_msg.lower():
+                        logger.warning("[AI Router] Gemini rate limit hit (429). Falling back to Cloud OCR / pypdf + Text LLM...")
+                        break
+        except Exception as client_err:
+            logger.warning(f"[AI Router] Gemini single-shot initialization or call failed: {client_err}. Falling back to PATH B...")
+
+    # PATH B: Extraction (Gemini Vision -> LlamaParse -> Local pypdf) -> Groq / Ollama Text Evaluation
     resume_md, ocr_provider = await extract_pdf_content(
         pdf_bytes,
         gemini_api_key=gemini_key or None,
-        mistral_api_key=mistral_key or None,
         llama_api_key=llama_key or None,
     )
 
@@ -175,43 +198,35 @@ async def evaluate_candidate_pipeline(
         except Exception as e:
             logger.warning(f"[AI Router] Groq evaluation failed: {e}")
 
-    # Try OpenRouter Free Fallback
-    if openrouter_key:
-        try:
-            or_client = AsyncOpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=openrouter_key,
-            )
-            resp = await or_client.chat.completions.create(
-                model="meta-llama/llama-3.1-8b-instruct:free",
-                messages=[{"role": "user", "content": text_prompt}],
-                response_format={"type": "json_object"},
-                temperature=0.1,
-            )
-            raw_json = resp.choices[0].message.content or "{}"
-            cleaned_json = _clean_json(raw_json)
-            return HRAnalysisResult.model_validate_json(cleaned_json), f"{ocr_provider}+openrouter-free"
-        except Exception as e:
-            logger.error(f"[AI Router] OpenRouter evaluation failed: {e}")
-
-    # Try Mistral AI Fallback
-    if mistral_key:
-        try:
-            mistral_client = AsyncOpenAI(
-                base_url="https://api.mistral.ai/v1",
-                api_key=mistral_key,
-            )
-            resp = await mistral_client.chat.completions.create(
-                model="mistral-small-latest",
-                messages=[{"role": "user", "content": text_prompt}],
-                response_format={"type": "json_object"},
-                temperature=0.1,
-            )
-            raw_json = resp.choices[0].message.content or "{}"
-            cleaned_json = _clean_json(raw_json)
-            return HRAnalysisResult.model_validate_json(cleaned_json), f"{ocr_provider}+mistral-small"
-        except Exception as e:
-            logger.error(f"[AI Router] Mistral evaluation fallback failed: {e}")
+    # Try Ollama Cloud Models Fallback
+    if ollama_key:
+        ollama_client = AsyncOpenAI(
+            base_url=ollama_url,
+            api_key=ollama_key,
+        )
+        ollama_models = [
+            "gpt-oss:120b",
+            "gpt-oss:20b",
+            "gemma4:31b",
+            "nemotron-3-nano:30b",
+            "nemotron-3-super",
+            "nemotron-3-ultra",
+            "beam",
+        ]
+        for o_model in ollama_models:
+            try:
+                resp = await ollama_client.chat.completions.create(
+                    model=o_model,
+                    messages=[{"role": "user", "content": text_prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                )
+                raw_json = resp.choices[0].message.content or "{}"
+                cleaned_json = _clean_json(raw_json)
+                return HRAnalysisResult.model_validate_json(cleaned_json), f"{ocr_provider}+ollama-{o_model}"
+            except Exception as e:
+                logger.warning(f"[AI Router] Ollama model '{o_model}' failed: {e}")
+                continue
 
     raise RuntimeError("All evaluation providers failed or hit rate limits.")
 

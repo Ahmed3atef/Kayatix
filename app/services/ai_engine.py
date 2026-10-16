@@ -261,41 +261,16 @@ async def _call_gemini(
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     preferred_models = [
-        "gemini-3.8-flash",
         "gemini-3.6-flash",
+        "gemini-3.8-flash",
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest",
         "gemini-flash-latest",
-        "gemini-3.7-flash",
+        "gemini-flash-lite-latest",
         "gemini-2.5-flash",
-        "gemini-2.5-pro",
         "gemini-1.5-flash",
     ]
-    models_to_try = list(preferred_models)
-    try:
-        listed = []
-        for m in client.models.list():
-            name = getattr(m, "name", "") or ""
-            actions = getattr(m, "supported_actions", []) or getattr(m, "supported_generation_methods", []) or []
-            if actions and "generateContent" not in actions:
-                continue
-            name_clean = name.replace("models/", "")
-            if any(k in name_clean.lower() for k in ["tts", "audio", "embed", "imagen", "realtime", "live", "customtools"]):
-                continue
-            listed.append(name_clean)
-        if listed:
-            flash_text = [m for m in listed if "flash" in m.lower()]
-            models_to_try = preferred_models + flash_text + listed
-    except Exception:
-        pass
-
-    seen = set()
-    deduped = []
-    for m in models_to_try:
-        if m not in seen:
-            seen.add(m)
-            deduped.append(m)
+    deduped = preferred_models
 
     last_err = None
     for model_name in deduped:
@@ -333,7 +308,7 @@ async def _call_openai_compatible_provider(
     response_schema: Any = CandidateEvaluationResult,
     system_instruction: str = SYSTEM_INSTRUCTION,
 ) -> str:
-    """Fallback Provider Handler for Groq Cloud and OpenRouter."""
+    """Fallback Provider Handler for Groq Cloud and Ollama Cloud."""
     if not api_key:
         raise ValueError(f"API key missing for model {model_name}")
 
@@ -385,7 +360,7 @@ async def evaluate_candidate_with_fallback(
     Executes full candidate evaluation across the multi-provider cascade:
     1. Reads RAG prompt template and AI system instructions from the database prior to API calls.
     2. Builds RAG augmented prompt with database template.
-    3. Multi-provider cascade: Gemini -> Groq -> Mistral -> OpenRouter.
+    3. Multi-provider cascade: Gemini -> Groq -> Ollama Cloud.
     """
     # 1. Read RAG & AI instructions from database before API call
     system_instruction, rag_prompt_template = await get_active_ai_instruction(db)
@@ -429,47 +404,34 @@ async def evaluate_candidate_with_fallback(
                 logger.info(f"Groq {groq_model} not accessible, attempting fallback...")
                 continue
             logger.warning(
-                f"Secondary provider (Groq {groq_model}) failed/throttled: {groq_err}. Failing over to Mistral/OpenRouter...")
+                f"Secondary provider (Groq {groq_model}) failed/throttled: {groq_err}. Failing over to Ollama Cloud...")
             break
-
-    # 4. Try Mistral AI (Free Tier / Experiment Plan: mistral-small-latest, open-mistral-nemo, open-mistral-7b)
-    if settings.MISTRAL_API_KEY and settings.MISTRAL_API_KEY.strip():
-        for mistral_model in ["mistral-small-latest", "open-mistral-nemo", "open-mistral-7b"]:
+    # 4. Try Tertiary: Ollama Cloud Models Pool Fallback (Free Tier: gpt-oss:120b, gpt-oss:20b, gemma4:31b, nemotron-3-nano:30b, nemotron-3-super, nemotron-3-ultra, beam)
+    if settings.OLLAMA_API_KEY and settings.OLLAMA_API_KEY.strip():
+        ollama_models = [
+            "gpt-oss:120b",
+            "gpt-oss:20b",
+            "gemma4:31b",
+            "nemotron-3-nano:30b",
+            "nemotron-3-super",
+            "nemotron-3-ultra",
+            "beam",
+        ]
+        base_url = (settings.OLLAMA_BASE_URL or "https://ollama.com/v1").rstrip("/")
+        for o_model in ollama_models:
             try:
                 raw_json = await _call_openai_compatible_provider(
-                    base_url="https://api.mistral.ai/v1",
-                    api_key=settings.MISTRAL_API_KEY,
-                    model_name=mistral_model,
+                    base_url=base_url,
+                    api_key=settings.OLLAMA_API_KEY.strip(),
+                    model_name=o_model,
                     prompt=user_prompt,
                     system_instruction=system_instruction,
                 )
                 cleaned_json = _clean_json_string(raw_json)
                 validated = CandidateEvaluationResult.model_validate_json(cleaned_json)
-                return validated, f"mistral/{mistral_model}"
-            except Exception as mistral_err:
-                logger.warning(
-                    f"Mistral AI model {mistral_model} failed/throttled: {mistral_err}. Continuing cascade..."
-                )
+                return validated, f"ollama/{o_model}"
+            except Exception as o_err:
+                logger.warning(f"Ollama model {o_model} failed/throttled: {o_err}. Continuing cascade...")
                 continue
-
-    # 5. Try Quaternary: OpenRouter Free Models Pool Fallback
-    for or_model in ["meta-llama/llama-3.1-8b-instruct:free", "meta-llama/llama-3.1-8b-instruct", "meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free"]:
-        try:
-            raw_json = await _call_openai_compatible_provider(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=settings.OPENROUTER_API_KEY,
-                model_name=or_model,
-                prompt=user_prompt,
-                system_instruction=system_instruction,
-            )
-            cleaned_json = _clean_json_string(raw_json)
-            validated = CandidateEvaluationResult.model_validate_json(cleaned_json)
-            slug = or_model.split("/")[-1]
-            return validated, f"openrouter/{slug}"
-        except Exception as or_err:
-            if "404" in str(or_err) or "unavailable for free" in str(or_err):
-                continue
-            logger.error(f"OpenRouter model {or_model} failed: {or_err}")
-            break
 
     raise RuntimeError("All configured AI providers are currently rate-limited or unavailable.")

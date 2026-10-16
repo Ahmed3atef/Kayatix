@@ -61,11 +61,8 @@ function formatProviderBadge(provider) {
     if (p.includes('groq')) {
         return `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace"><i class="bi bi-lightning-charge-fill me-1"></i>${provider}</span>`;
     }
-    if (p.includes('mistral')) {
-        return `<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace"><i class="bi bi-fire me-1"></i>${provider}</span>`;
-    }
-    if (p.includes('openrouter')) {
-        return `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cpu-fill me-1"></i>${provider}</span>`;
+    if (p.includes('ollama')) {
+        return `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cloud me-1"></i>${provider}</span>`;
     }
     return `<span class="badge bg-secondary-subtle text-secondary border font-monospace">${provider}</span>`;
 }
@@ -127,9 +124,14 @@ function buildEvaluationCardHTML(apiData) {
         </div>
     `).join('') || '<div class="text-muted small">No questions generated.</div>';
 
-    const extractionBadge = apiData.extraction_method === 'mistral_ocr'
-        ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace"><i class="bi bi-file-earmark-text me-1"></i>Mistral AI OCR</span>'
-        : '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-file-earmark-pdf me-1"></i>Standard Parser</span>';
+    let extractionBadge = '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-file-earmark-pdf me-1"></i>Standard Parser</span>';
+    if (apiData.extraction_method === 'gemini_vision_ocr' || apiData.extraction_method === 'multimodal_direct') {
+        extractionBadge = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-eye me-1"></i>Gemini Vision</span>';
+    } else if (apiData.extraction_method === 'llamaparse_cloud') {
+        extractionBadge = '<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cloud-arrow-down me-1"></i>LlamaParse</span>';
+    } else if (apiData.extraction_method === 'pypdf_local') {
+        extractionBadge = '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-cpu me-1"></i>pypdf (Local)</span>';
+    }
 
     return `
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-3">
@@ -400,13 +402,13 @@ async function syncFooterProviderStatus() {
                 ? 'unconfigured'
                 : (localStatus.groq || health.groq || 'unconfigured');
 
-            const openrouterStatus = !settings.openrouter_api_key_configured
+            const ollamaStatus = !settings.ollama_api_key_configured
                 ? 'unconfigured'
-                : (localStatus.openrouter || health.openrouter || 'unconfigured');
+                : (localStatus.ollama || health.ollama || 'unconfigured');
 
             updateFooterBadge('footerBadgeGemini', geminiStatus, 'Priority 1: Gemini 2.5 Flash');
             updateFooterBadge('footerBadgeGroq', groqStatus, 'Priority 2: Groq Llama 3.3 70B');
-            updateFooterBadge('footerBadgeOpenRouter', openrouterStatus, 'Priority 3: OpenRouter Fallback');
+            updateFooterBadge('footerBadgeOllama', ollamaStatus, 'Priority 3: Ollama Cloud Fallback');
             return;
         }
     } catch (_) {}
@@ -414,7 +416,7 @@ async function syncFooterProviderStatus() {
     // Fallback to localStatus if API was unreachable
     if (localStatus.gemini) updateFooterBadge('footerBadgeGemini', localStatus.gemini, 'Priority 1: Gemini 2.5 Flash');
     if (localStatus.groq) updateFooterBadge('footerBadgeGroq', localStatus.groq, 'Priority 2: Groq Llama 3.3 70B');
-    if (localStatus.openrouter) updateFooterBadge('footerBadgeOpenRouter', localStatus.openrouter, 'Priority 3: OpenRouter Fallback');
+    if (localStatus.ollama) updateFooterBadge('footerBadgeOllama', localStatus.ollama, 'Priority 3: Ollama Cloud Fallback');
 }
 
 window.updateFooterBadge = updateFooterBadge;

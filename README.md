@@ -56,7 +56,7 @@
 - **Domain-Agnostic Quantified Impact Detection**:
     - Scans for active accomplishment verbs across management, sales, finance, healthcare, and engineering alongside metric regexes (`%`, `$`, `€`, `revenue`, `team of 15`, `users`, `patients`).
 - **Flexible 3-Tier Evaluation Strategy**:
-    - **Hybrid Mode (Default & Recommended)**: Extracts candidate identity, skills, true YOE, and metrics locally in ~5ms with **0 tokens**, then issues a compact prompt to the LLM (Gemini &rarr; Groq &rarr; OpenRouter) as the **Source of Truth** for dynamic, role-tailored interview questions and executive synthesis. Saves ~90% quota while preventing HTTP 429 rate limits!
+    - **Hybrid Mode (Default & Recommended)**: Extracts candidate identity, skills, true YOE, and metrics locally in ~5ms with **0 tokens**, then issues a compact prompt to the LLM (Gemini &rarr; Groq &rarr; Ollama Cloud) as the **Source of Truth** for dynamic, role-tailored interview questions and executive synthesis. Saves ~90% quota while preventing HTTP 429 rate limits!
     - **100% Offline Local Engine**: Zero-quota, fully offline evaluation with deterministic scoring and template questions.
     - **Cloud LLM Cascade**: Full end-to-end multi-provider LLM processing.
 - **100% Legal Candidate Sourcing (Zero Account Bans)**:
@@ -66,7 +66,7 @@
     - Uses 5-stage Chain-of-Thought reasoning to audit genuine commercial software experience, respect Boolean alternatives (*"FastAPI or Django"*), calibrate 0-100 scores, and anchor interview questions in real candidate projects.
 - **Deep Portfolio & Personal Website Analysis**: Asynchronously scrapes and strips boilerplate from candidate personal blogs, technical portfolios, and GitHub readmes using `httpx` and `trafilatura` with client-side SPA bundle discovery.
 - **High Availability Multi-Provider AI Failover**:
-    - Aggregates developer quotas across **Google AI Studio (Gemini 2.5 Flash)**, **Groq Cloud (Llama 3.3 70B)**, and **OpenRouter (Fallback Pool)**.
+    - Aggregates developer quotas across **Google AI Studio (Gemini 2.5 Flash)**, **Groq Cloud (Llama 3.3 70B)**, and **Ollama Cloud (Model Pool)**.
     - Transparently handles HTTP 429 rate limits and 503 spikes via circuit-breaker fallback logic.
     - **Active Provider Cache Validation**: SHA-256 caching with active provider verification and force refresh support.
 - **Configurable Job Description Templates**:
@@ -108,7 +108,7 @@ flowchart TD
     subgraph Cascade ["Multi-Provider AI Fallback Chain"]
         P1["Priority 1: Google Gemini 2.5 Flash\n(Structured JSON Native)"]
         P2["Priority 2: Groq Cloud Llama 3.3 70B\n(Ultra-Fast LPU Engine)"]
-        P3["Priority 3: OpenRouter Fallback\n(Model Pool)"]
+        P3["Priority 3: Ollama Cloud Fallback\n(Model Pool)"]
 
         P1 -->|"HTTP 429 / Error"| P2
         P2 -->|"HTTP 429 / Error"| P3
@@ -134,7 +134,7 @@ To enable multi-provider AI resilience, obtain developer API keys from the follo
 | :--------------------------- | :-------------------------------------- | :------------------------- | :---------------------------------------------------------------------------------------------------------------- |
 | **Google AI Studio**         | `gemini-2.5-flash`                      | 15 RPM, 1,500 RPD          | [Google AI Studio](https://aistudio.google.com/)                                                                  |
 | **Groq Cloud**               | `llama-3.3-70b-versatile`               | 30 RPM, 14,400 RPD         | [Groq Console](https://console.groq.com/keys)                                                                     |
-| **OpenRouter**               | `meta-llama/llama-3.1-8b-instruct:free` | Standard rotating pool     | [OpenRouter Keys](https://openrouter.ai/settings/keys)                                                            |
+| **Ollama Cloud**             | `beam`, `gemma4:31b`, `gpt-oss:120b`, `gpt-oss:20b`, `nemotron-3-nano:30b`, `nemotron-3-super`, `nemotron-3-ultra` | Cloud Model Pool | [Ollama Settings](https://ollama.com/settings/keys) |
 | **Google Custom Search API** | `Google Programmable Search`            | 100 queries / day          | [Google Cloud](https://console.cloud.google.com/) & [Search Engine](https://programmablesearchengine.google.com/) |
 
 ### Setting Up Google Custom Search (X-Ray Sourcing):
@@ -269,7 +269,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 - **URL**: **`http://localhost:8000/settings`**
 - **Guided Form**:
-    - Manage credentials for **Google AI Studio**, **Groq Cloud**, **OpenRouter**, and **Google Search Engine ID (`cx`)**.
+    - Manage credentials for **Google AI Studio**, **Groq Cloud**, **Ollama Cloud**, and **Google Search Engine ID (`cx`)**.
     - Configure subscription tiers (`standard`, `pro`, `enterprise`) and rate limits (RPM).
 - **One-Click Live Connectivity Diagnostics**:
     - Click **"Validate Credentials"** to run live handshake checks against all configured AI providers.
@@ -340,7 +340,7 @@ pytest -v
 
 ### Test Coverage Highlights:
 
-- **`test_ai_engine.py`**: Verifies deterministic SHA-256 hashing, markdown code-block JSON cleaning, Gemini primary execution, and transparent fallback to Groq and OpenRouter upon HTTP 429 errors.
+- **`test_ai_engine.py`**: Verifies deterministic SHA-256 hashing, markdown code-block JSON cleaning, Gemini primary execution, and transparent fallback to Groq and Ollama Cloud upon HTTP 429 errors.
 - **`test_caching.py`**: Confirms that identical `(resume + JD)` inputs hit the SQLite cache without issuing new API requests.
 - **`test_endpoints.py`**: Validates file format boundaries (rejecting non-PDFs), successful multi-part form parsing, and sourcing endpoints.
 - **`test_services.py`**: Validates PDF text noise removal, scanned image detection, Trafilatura HTML stripping, and Google CSE error handling.
@@ -353,7 +353,7 @@ pytest -v
 
 ### Q1: What happens if an AI provider experiences rate-limiting (HTTP 429)?
 
-> The engine automatically executes circuit-breaker fallback down the cascade: **Gemini 2.5 Flash** $\to$ **Groq Llama 3.3 70B** $\to$ **OpenRouter Fallback Pool**. The switch happens with sub-second failover and zero disruption to the end user. If all configured providers are temporarily unavailable, a descriptive `HTTP 503` informs the user to check their rate limits.
+> The engine automatically executes circuit-breaker fallback down the cascade: **Gemini 2.5 Flash** $\to$ **Groq Llama 3.3 70B** $\to$ **Ollama Cloud Fallback Pool**. The switch happens with sub-second failover and zero disruption to the end user. If all configured providers are temporarily unavailable, a descriptive `HTTP 503` informs the user to check their rate limits.
 
 ### Q2: How does the platform avoid violating LinkedIn's Terms of Service?
 

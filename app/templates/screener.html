@@ -51,10 +51,10 @@
                                 </div>
                                 <div class="form-text mt-1 d-flex flex-wrap align-items-center justify-content-between gap-1">
                                     <span>Supports standard PDF resumes &amp; LinkedIn exports.</span>
-                                    {% if app_settings.MISTRAL_API_KEY %}
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="Mistral AI OCR is enabled"><i class="bi bi-file-earmark-text me-1"></i>Mistral AI OCR Active</span>
+                                    {% if app_settings.GEMINI_API_KEY %}
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="Gemini 2.5 Flash Vision OCR & Multimodal Evaluation Active"><i class="bi bi-eye me-1"></i>Gemini Vision OCR Active</span>
                                     {% else %}
-                                        <span class="badge bg-secondary-subtle text-secondary border" title="Configure Mistral API key in Settings to activate AI OCR"><i class="bi bi-file-earmark-pdf me-1"></i>Standard Parser (Add Mistral Key for OCR)</span>
+                                        <span class="badge bg-secondary-subtle text-secondary border" title="Local selectable text parser ready"><i class="bi bi-file-earmark-pdf me-1"></i>Local Parser (pypdf)</span>
                                     {% endif %}
                                 </div>
                             </div>

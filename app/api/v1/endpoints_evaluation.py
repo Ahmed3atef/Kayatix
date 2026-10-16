@@ -49,10 +49,8 @@ async def _process_and_cache_evaluation(
             provider_still_active = bool(settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip())
         elif "groq" in cached_provider:
             provider_still_active = bool(settings.GROQ_API_KEY and settings.GROQ_API_KEY.strip())
-        elif "mistral" in cached_provider:
-            provider_still_active = bool(settings.MISTRAL_API_KEY and settings.MISTRAL_API_KEY.strip())
-        elif "openrouter" in cached_provider:
-            provider_still_active = bool(settings.OPENROUTER_API_KEY and settings.OPENROUTER_API_KEY.strip())
+        elif "ollama" in cached_provider:
+            provider_still_active = bool(settings.OLLAMA_API_KEY and settings.OLLAMA_API_KEY.strip())
 
         # If cache entry was created by legacy or unconfigured engine, invalidate it
         if any(term in cached_provider for term in ["local", "hybrid"]):
@@ -73,7 +71,7 @@ async def _process_and_cache_evaluation(
                 extraction_method=extraction_method,
             )
 
-    # Run Candidate Evaluation (Real Cloud LLM Cascade: Gemini -> Groq -> Mistral -> OpenRouter)
+    # Run Candidate Evaluation (Real Cloud LLM Cascade: Gemini -> Groq -> Ollama Cloud)
     logger.info(
         f"[AI Evaluator] Initiating live AI candidate evaluation (Source: {source_type}, "
         f"Candidate text: {len(candidate_text)} chars, JD text: {len(job_description)} chars)..."

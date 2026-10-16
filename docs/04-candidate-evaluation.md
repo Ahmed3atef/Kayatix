@@ -7,13 +7,13 @@ Kayatix automates the technical vetting and screening process for engineering an
 ## 📄 Resume PDF Screening (`/screener`)
 
 * **Accepted Formats**: Standard resume PDFs, scanned document PDFs, Curriculum Vitae (CV), or LinkedIn "Save to PDF" exports.
-* **Zero-Local-Parser Cloud OCR Pipeline**:
-  Kayatix completely eliminates local CPU PDF parsers in favor of an asynchronous, zero-cost 3-tier Cloud OCR and Evaluation pipeline:
-  1. **Single-Shot Multimodal Vision (Primary Path)**: When `GEMINI_API_KEY` is present, `gemini-2.5-flash` evaluates raw PDF bytes + Job Description in a single multimodal call, bypassing standalone OCR to reduce latency and token usage by 50%.
+* **Quota-Protected Extraction & Evaluation Pipeline**:
+  Kayatix prioritizes zero-cost evaluation while protecting cloud API quotas:
+  1. **Single-Shot Multimodal Vision (Primary Path)**: When `GEMINI_API_KEY` is present, `gemini-2.5-flash` evaluates raw PDF bytes + Job Description in a single multimodal call, cutting latency and token consumption by 50%.
   2. **Tier 1 Cloud OCR (`gemini-2.5-flash-lite`)**: High-precision native document vision for scanned, multi-column, and Arabic/English PDFs (Free Tier: 30 RPM / 1,500 RPD).
-  3. **Tier 2 Cloud OCR (`mistral-ocr-latest`)**: High-accuracy document OCR via async REST API with Base64 Data URI payloads and exponential backoff.
-  4. **Tier 3 Cloud OCR (`llamaparse_cloud`)**: Cloud-native document parsing via LlamaCloud REST API (Free 1,000 pages/day).
-  5. **Text Evaluation Cascade**: When single-shot falls back, Markdown extracted from Cloud OCR is evaluated on **Groq** (`llama-3.3-70b-versatile`) or **OpenRouter** (`meta-llama/llama-3.1-8b-instruct:free`).
+  3. **Tier 2 Cloud OCR (`llamaparse_cloud`)**: Cloud-native document parsing via LlamaCloud REST API (Free 1,000 pages/day, optional).
+  4. **Tier 3 Local CPU Fallback (`pypdf`)**: If all cloud options fail or quota is exhausted, extracts text locally using `pypdf` with zero cloud API quota burned and zero latency.
+  5. **Text Evaluation Cascade**: When single-shot falls back, Markdown extracted from OCR / local parser is evaluated on **Groq** (`llama-3.3-70b-versatile`) or **Ollama Cloud** (`beam`, `gemma4:31b`, `gpt-oss:120b`, `gpt-oss:20b`, `nemotron-3-nano:30b`, `nemotron-3-super`, `nemotron-3-ultra`).
 
 ---
 

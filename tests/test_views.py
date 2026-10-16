@@ -125,10 +125,10 @@ async def test_footer_ai_provider_indicators(client):
     # 1. With keys active and valid
     settings.GEMINI_API_KEY = "test_gemini_key"
     settings.GROQ_API_KEY = "test_groq_key"
-    settings.OPENROUTER_API_KEY = ""
+    settings.OLLAMA_API_KEY = ""
     provider_health_cache["gemini"] = "valid"
     provider_health_cache["groq"] = "valid"
-    provider_health_cache["openrouter"] = "unconfigured"
+    provider_health_cache["ollama"] = "unconfigured"
 
     resp = await client.get("/")
     assert resp.status_code == 200
@@ -136,13 +136,13 @@ async def test_footer_ai_provider_indicators(client):
 
     assert 'id="footerBadgeGemini"' in html
     assert 'id="footerBadgeGroq"' in html
-    assert 'id="footerBadgeOpenRouter"' in html
+    assert 'id="footerBadgeOllama"' in html
 
     # Gemini and Groq should have green badge classes
     assert 'id="footerBadgeGemini" class="badge bg-success-subtle text-success' in html
     assert 'id="footerBadgeGroq" class="badge bg-success-subtle text-success' in html
-    # OpenRouter without key should be secondary
-    assert 'id="footerBadgeOpenRouter" class="badge bg-secondary-subtle text-secondary' in html
+    # Ollama without key should be secondary
+    assert 'id="footerBadgeOllama" class="badge bg-secondary-subtle text-secondary' in html
 
 
 @pytest.mark.asyncio

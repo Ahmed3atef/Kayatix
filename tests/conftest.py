@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # Set dummy environment keys for testing before importing settings
 os.environ["GEMINI_API_KEY"] = "mock_gemini_key"
 os.environ["GROQ_API_KEY"] = "mock_groq_key"
-os.environ["OPENROUTER_API_KEY"] = "mock_openrouter_key"
+os.environ["OLLAMA_API_KEY"] = "mock_ollama_key"
 os.environ["GOOGLE_CSE_API_KEY"] = "mock_cse_key"
 os.environ["GOOGLE_CSE_CX_ID"] = "mock_cse_cx"
 

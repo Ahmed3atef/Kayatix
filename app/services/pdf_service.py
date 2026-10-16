@@ -1,11 +1,13 @@
 import asyncio
 import base64
+import io
 import logging
 import re
 from typing import Optional, Tuple
 import httpx
 from google import genai
 from google.genai import types
+import pypdf
 from app.core.config import settings
 
 logger = logging.getLogger("kayatix.pdf")
@@ -23,22 +25,62 @@ def _clean_markdown(raw_md: str, max_chars: int) -> str:
     return cleaned[:max_chars]
 
 
+def extract_text_with_pypdf(file_bytes: bytes, max_chars: int = 18000) -> str:
+    """
+    Tier 3 Local CPU Fallback (Zero-Cost / Zero-Quota):
+    Extracts text from selectable PDFs locally using pypdf.
+    Consumes 0 cloud API quota and runs with zero latency.
+    """
+    if not file_bytes:
+        raise ValueError("Empty PDF file bytes provided.")
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+        pages_text = []
+        for idx, page in enumerate(reader.pages):
+            text = page.extract_text() or ""
+            if text.strip():
+                pages_text.append(f"## Page {idx + 1}\n\n{text.strip()}")
+        combined = "\n\n".join(pages_text)
+        cleaned = _clean_markdown(combined, max_chars)
+        if len(cleaned) < 30:
+            raise ValueError("PDF appears to be a scanned image without selectable text.")
+        logger.info(f"[pypdf Local Fallback] Extracted {len(cleaned)} chars locally with zero quota usage.")
+        return cleaned
+    except ValueError as ve:
+        raise ve
+    except Exception as e:
+        raise RuntimeError(f"pypdf extraction error: {e}")
+
+
 async def extract_text_with_gemini_vision(
     file_bytes: bytes,
     api_key: Optional[str] = None,
     max_chars: int = 24000,
-    model: str = "gemini-2.5-flash-lite",
+    model: Optional[str] = None,
 ) -> str:
     """
-    Tier 1 Cloud OCR: Uses Gemini 2.5 Flash-Lite native multimodal PDF vision
+    Tier 1 Cloud Vision OCR: Uses modern Gemini Flash-Lite/Flash native multimodal PDF vision
     to extract structured Markdown from scanned, Arabic/English, or multi-column PDFs.
+    Cascades across active models if a model is deprecated (404) or temporarily unavailable (503).
     """
     clean_key = (api_key or settings.GEMINI_API_KEY or "").strip()
     if not clean_key:
         raise ValueError("GEMINI_API_KEY is not configured.")
 
     size_kb = len(file_bytes) / 1024
-    logger.info(f"[Gemini Vision OCR] Processing PDF in cloud ({size_kb:.1f} KB, Model: '{model}')...")
+    candidate_models = (
+        [model]
+        if model
+        else [
+            "gemini-3.5-flash-lite",
+            "gemini-3.6-flash",
+            "gemini-3.8-flash",
+            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
+            "gemini-2.5-flash-lite",
+            "gemini-1.5-flash",
+        ]
+    )
 
     client = genai.Client(api_key=clean_key)
     ocr_prompt = (
@@ -49,96 +91,43 @@ async def extract_text_with_gemini_vision(
         "Return ONLY the extracted Markdown content."
     )
 
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=model,
-        contents=[
-            types.Part.from_bytes(data=file_bytes, mime_type="application/pdf"),
-            ocr_prompt,
-        ],
-        config=types.GenerateContentConfig(temperature=0.0),
-    )
-
-    extracted_md = response.text or ""
-    cleaned = _clean_markdown(extracted_md, max_chars)
-
-    if len(cleaned) < 30:
-        raise RuntimeError("Gemini Vision OCR returned insufficient text.")
-
-    logger.info(f"[Gemini Vision OCR] Extracted {len(cleaned)} chars of Markdown.")
-    return cleaned
-
-
-async def extract_text_with_mistral_ocr(
-    file_bytes: bytes,
-    api_key: Optional[str] = None,
-    max_chars: int = 24000,
-    model: str = "mistral-ocr-latest",
-    max_retries: int = 2,
-    initial_backoff: float = 1.0,
-) -> str:
-    """
-    Tier 2 Cloud OCR: Extracts structured Markdown using Mistral AI OCR REST API.
-    """
-    clean_key = (api_key or settings.MISTRAL_API_KEY or "").strip()
-    if not clean_key:
-        raise ValueError("MISTRAL_API_KEY is not configured.")
-
-    b64_pdf = encode_pdf_to_base64(file_bytes)
-    data_url = f"data:application/pdf;base64,{b64_pdf}"
-
-    payload = {
-        "model": model,
-        "document": {
-            "type": "document_url",
-            "document_url": data_url,
-        },
-        "include_image_base64": False,
-    }
-
-    backoff = initial_backoff
-    last_err: Optional[Exception] = None
-
-    for attempt in range(1, max_retries + 1):
+    last_error: Optional[Exception] = None
+    for model_name in candidate_models:
         try:
-            async with httpx.AsyncClient(timeout=60.0) as http_client:
-                resp = await http_client.post(
-                    "https://api.mistral.ai/v1/ocr",
-                    headers={
-                        "Authorization": f"Bearer {clean_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                if resp.status_code in (401, 402, 403):
-                    raise ValueError(f"Mistral API auth/quota error (HTTP {resp.status_code}): {resp.text}")
-                if resp.status_code == 429:
-                    raise RuntimeError("Mistral API rate limit reached (HTTP 429)")
-                if resp.status_code != 200:
-                    raise RuntimeError(f"Mistral OCR error (HTTP {resp.status_code}): {resp.text}")
+            logger.info(f"[Gemini Vision OCR] Processing PDF in cloud ({size_kb:.1f} KB, Model: '{model_name}')...")
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=file_bytes, mime_type="application/pdf"),
+                    ocr_prompt,
+                ],
+                config=types.GenerateContentConfig(temperature=0.0),
+            )
 
-                data = resp.json()
-                pages = data.get("pages", [])
-                pages_output = [
-                    f"## Page {p.get('index', 0) + 1}\n\n{(p.get('markdown') or '').strip()}"
-                    for p in pages
-                    if (p.get("markdown") or "").strip()
-                ]
-                combined_md = "\n\n".join(pages_output)
-                cleaned = _clean_markdown(combined_md, max_chars)
+            extracted_md = response.text or ""
+            cleaned = _clean_markdown(extracted_md, max_chars)
 
-                logger.info(f"[Mistral OCR] Extracted {len(cleaned)} chars across {len(pages)} page(s).")
-                return cleaned
+            if len(cleaned) < 30:
+                raise RuntimeError("Gemini Vision OCR returned insufficient text.")
 
-        except ValueError as auth_err:
-            raise auth_err
+            logger.info(f"[Gemini Vision OCR] Extracted {len(cleaned)} chars of Markdown using '{model_name}'.")
+            return cleaned
         except Exception as e:
-            last_err = e
-            if attempt < max_retries:
-                await asyncio.sleep(backoff)
-                backoff *= 2
+            err_msg = str(e)
+            last_error = e
+            if "insufficient text" in err_msg.lower():
+                raise e
+            logger.warning(f"[Gemini Vision OCR] Model '{model_name}' failed: {err_msg}")
+            if "404" in err_msg or "not_found" in err_msg.lower() or "503" in err_msg or "unavailable" in err_msg.lower():
+                continue
+            if "429" in err_msg or "quota" in err_msg.lower():
+                logger.warning("[Gemini Vision OCR] Gemini quota limit (429) hit. Stopping cascade.")
+                break
 
-    raise RuntimeError(f"Mistral OCR failed after {max_retries} attempts: {last_err}")
+    if last_error:
+        raise last_error
+    raise RuntimeError("Gemini Vision OCR returned insufficient text or no accessible models.")
 
 
 async def extract_text_with_llamaparse(
@@ -147,7 +136,7 @@ async def extract_text_with_llamaparse(
     max_chars: int = 24000,
 ) -> str:
     """
-    Tier 3 Cloud OCR: Uses LlamaCloud's LlamaParse REST API (Free 1,000 pages/day)
+    Tier 2 Cloud OCR: Uses LlamaCloud's LlamaParse REST API (Free 1,000 pages/day)
     to convert complex/scanned PDFs into Markdown in the cloud.
     """
     clean_key = (api_key or settings.LLAMA_CLOUD_API_KEY or "").strip()
@@ -184,16 +173,15 @@ async def extract_text_with_llamaparse(
 async def extract_pdf_content(
     file_bytes: bytes,
     gemini_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
     llama_api_key: Optional[str] = None,
     max_chars: int = 24000,
 ) -> Tuple[str, str]:
     """
-    Master Zero-Local-Parser Cloud OCR Pipeline.
+    Master Quota-Protected PDF Extraction Pipeline.
     Order of execution:
     1. Gemini 2.5 Flash-Lite Native Vision (Free 30 RPM / 1,500 RPD)
-    2. Mistral AI OCR (if valid MISTRAL_API_KEY is present)
-    3. LlamaParse Cloud API (Free 1,000 pages/day)
+    2. LlamaParse Cloud API (Free 1,000 pages/day, if key configured)
+    3. pypdf Local CPU Parser (Zero-Cost / Zero-Quota fallback for selectable PDFs)
     Returns: Tuple[extracted_markdown, provider_used]
     """
     # 1. Gemini Vision OCR
@@ -204,29 +192,26 @@ async def extract_pdf_content(
     except Exception as e:
         logger.warning(f"[PDF Pipeline] Gemini Vision OCR failed/skipped: {e}")
 
-    # 2. Mistral AI OCR
-    try:
-        text = await extract_text_with_mistral_ocr(file_bytes, api_key=mistral_api_key, max_chars=max_chars)
-        if len(text) >= 40:
-            return text, "mistral_ocr"
-    except Exception as e:
-        logger.warning(f"[PDF Pipeline] Mistral OCR failed/skipped: {e}")
+    # 2. LlamaParse Cloud (if configured)
+    llama_k = (llama_api_key or settings.LLAMA_CLOUD_API_KEY or "").strip()
+    if llama_k:
+        try:
+            text = await extract_text_with_llamaparse(file_bytes, api_key=llama_k, max_chars=max_chars)
+            if len(text) >= 40:
+                return text, "llamaparse_cloud"
+        except Exception as e:
+            logger.warning(f"[PDF Pipeline] LlamaParse Cloud failed/skipped: {e}")
 
-    # 3. LlamaParse Cloud
+    # 3. Local pypdf CPU Parser (Zero-Cost / Zero-Quota Fallback)
     try:
-        text = await extract_text_with_llamaparse(file_bytes, api_key=llama_api_key, max_chars=max_chars)
-        if len(text) >= 40:
-            return text, "llamaparse_cloud"
+        text = extract_text_with_pypdf(file_bytes, max_chars=max_chars)
+        if len(text) >= 30:
+            return text, "pypdf_local_parser"
     except Exception as e:
-        logger.error(f"[PDF Pipeline] LlamaParse Cloud failed/skipped: {e}")
+        logger.warning(f"[PDF Pipeline] Local pypdf fallback failed: {e}")
 
     raise RuntimeError(
-        "All cloud PDF OCR providers failed or hit rate limits. "
-        "Ensure GEMINI_API_KEY, MISTRAL_API_KEY, or LLAMA_CLOUD_API_KEY is configured."
+        "All PDF extraction options failed. "
+        "Cloud OCR options (Gemini / LlamaParse) failed or hit quota limits, "
+        "and the document is a scanned image with no selectable text for local extraction."
     )
-
-    raise RuntimeError(
-        "All cloud PDF OCR providers failed or hit rate limits. "
-        "Ensure GEMINI_API_KEY, MISTRAL_API_KEY, or LLAMA_CLOUD_API_KEY is configured."
-    )
-

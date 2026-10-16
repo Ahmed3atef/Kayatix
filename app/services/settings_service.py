@@ -323,8 +323,8 @@ def generate_config_text(record: UserSettings) -> str:
         f'# AI Provider Keys\n'
         f'GEMINI_API_KEY="{record.gemini_api_key or ""}"\n'
         f'GROQ_API_KEY="{record.groq_api_key or ""}"\n'
-        f'MISTRAL_API_KEY="{record.mistral_api_key or ""}"\n'
-        f'OPENROUTER_API_KEY="{record.openrouter_api_key or ""}"\n\n'
+        f'OLLAMA_API_KEY="{getattr(record, "ollama_api_key", None) or ""}"\n'
+        f'OLLAMA_BASE_URL="{getattr(record, "ollama_base_url", None) or settings.OLLAMA_BASE_URL}"\n\n'
         f'# Legal LinkedIn X-Ray Search Keys\n'
         f'GOOGLE_CSE_API_KEY="{record.google_cse_api_key or ""}"\n'
         f'GOOGLE_CSE_CX_ID="{record.google_cse_cx_id or ""}"\n\n'
@@ -377,49 +377,118 @@ def _persist_database_url_to_env(new_url: str):
         logger.warning(f"Could not persist DATABASE_URL to .env file: {e}")
 
 
-async def _ensure_schema_columns_exist(db: AsyncSession):
-    """Ensures mistral_api_key and job_templates_schema_timestamp exist in user_settings, and ai_instructions table exists."""
-    # 1. mistral_api_key
+def _get_dialect_name(db: AsyncSession) -> str:
     try:
-        await db.execute(text("SELECT mistral_api_key FROM user_settings LIMIT 1"))
+        if db.bind:
+            return getattr(db.bind.dialect, "name", "sqlite").lower()
     except Exception:
-        try:
-            await db.rollback()
-            await db.execute(text("ALTER TABLE user_settings ADD COLUMN mistral_api_key VARCHAR(255)"))
-            await db.commit()
-            logger.info("[Database Migration] Added mistral_api_key column to user_settings.")
-        except Exception:
-            await db.rollback()
+        pass
+    return "sqlite"
 
-    # 2. job_templates_schema_timestamp
+
+async def _column_exists(db: AsyncSession, table_name: str, column_name: str) -> bool:
+    """Safely checks if column exists in table without throwing or aborting transactions."""
+    dialect = _get_dialect_name(db)
     try:
-        await db.execute(text("SELECT job_templates_schema_timestamp FROM user_settings LIMIT 1"))
-    except Exception:
+        if "postgres" in dialect:
+            res = await db.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = :t AND column_name = :c"
+                ),
+                {"t": table_name.lower(), "c": column_name.lower()},
+            )
+            return res.scalar() is not None
+        else:
+            res = await db.execute(text(f"PRAGMA table_info({table_name})"))
+            columns = [str(r[1]).lower() for r in res.fetchall()]
+            return column_name.lower() in columns
+    except Exception as e:
+        logger.debug(f"[Schema Check] _column_exists check failed for {table_name}.{column_name}: {e}")
+        return False
+
+
+async def _table_exists(db: AsyncSession, table_name: str) -> bool:
+    """Safely checks if table exists in database without throwing or aborting transactions."""
+    dialect = _get_dialect_name(db)
+    try:
+        if "postgres" in dialect:
+            res = await db.execute(
+                text("SELECT 1 FROM information_schema.tables WHERE table_name = :t"),
+                {"t": table_name.lower()},
+            )
+            return res.scalar() is not None
+        else:
+            res = await db.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name = :t"),
+                {"t": table_name},
+            )
+            return res.scalar() is not None
+    except Exception as e:
+        logger.debug(f"[Schema Check] _table_exists check failed for {table_name}: {e}")
+        return False
+
+
+_schema_ensured: bool = False
+
+
+async def _ensure_schema_columns_exist(db: AsyncSession, force: bool = False):
+    """Ensures ollama_api_key, ollama_base_url, and job_templates_schema_timestamp exist in user_settings, and ai_instructions table exists."""
+    global _schema_ensured
+    if _schema_ensured and not force:
+        return
+
+    # First verify if user_settings table exists
+    if not await _table_exists(db, "user_settings"):
+        return
+
+    # 1. ollama_api_key
+    if not await _column_exists(db, "user_settings", "ollama_api_key"):
         try:
-            await db.rollback()
+            await db.execute(text("ALTER TABLE user_settings ADD COLUMN ollama_api_key VARCHAR(255)"))
+            await db.commit()
+            logger.info("[Database Migration] Added ollama_api_key column to user_settings.")
+        except Exception as e:
+            logger.warning(f"[Database Migration] Adding ollama_api_key skipped/failed: {e}")
+
+    # 2. ollama_base_url
+    if not await _column_exists(db, "user_settings", "ollama_base_url"):
+        try:
+            await db.execute(text("ALTER TABLE user_settings ADD COLUMN ollama_base_url VARCHAR(255) DEFAULT 'https://ollama.com/v1'"))
+            await db.commit()
+            logger.info("[Database Migration] Added ollama_base_url column to user_settings.")
+        except Exception as e:
+            logger.warning(f"[Database Migration] Adding ollama_base_url skipped/failed: {e}")
+
+    # 3. job_templates_schema_timestamp
+    if not await _column_exists(db, "user_settings", "job_templates_schema_timestamp"):
+        try:
             await db.execute(text("ALTER TABLE user_settings ADD COLUMN job_templates_schema_timestamp VARCHAR(50)"))
             await db.commit()
             logger.info("[Database Migration] Added job_templates_schema_timestamp column to user_settings.")
-        except Exception:
-            await db.rollback()
+        except Exception as e:
+            logger.warning(f"[Database Migration] Adding job_templates_schema_timestamp skipped/failed: {e}")
 
-    # 3. ai_instructions table
-    try:
-        await db.execute(text("SELECT id, modified_timestamp FROM ai_instructions LIMIT 1"))
-    except Exception:
+    # 4. ai_instructions table
+    if not await _table_exists(db, "ai_instructions"):
         try:
-            await db.rollback()
             from app.core.database import Base, engine
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("[Database Migration] Initialized ai_instructions table.")
-        except Exception:
-            await db.rollback()
+        except Exception as e:
+            logger.warning(f"[Database Migration] Initializing ai_instructions table skipped/failed: {e}")
 
+    # 5. modified_timestamp column in ai_instructions
+    if await _table_exists(db, "ai_instructions") and not await _column_exists(db, "ai_instructions", "modified_timestamp"):
+        try:
+            await db.execute(text("ALTER TABLE ai_instructions ADD COLUMN modified_timestamp VARCHAR(50)"))
+            await db.commit()
+            logger.info("[Database Migration] Added modified_timestamp column to ai_instructions table.")
+        except Exception as e:
+            logger.warning(f"[Database Migration] Adding modified_timestamp column skipped/failed: {e}")
 
-async def _ensure_mistral_column_exists(db: AsyncSession):
-    """Backward-compatible alias for _ensure_schema_columns_exist."""
-    await _ensure_schema_columns_exist(db)
+    _schema_ensured = True
 
 
 async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
@@ -429,7 +498,9 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
     - If any key is missing in the database but configured in environment/defaults, it is backfilled.
     - If no settings record exists at all, creates one with system defaults and any configured env values.
     """
-    await _ensure_mistral_column_exists(db)
+    if not _schema_ensured:
+        await _ensure_schema_columns_exist(db)
+
     stmt = select(UserSettings).limit(1)
     result = await db.execute(stmt)
     user_settings = result.scalar_one_or_none()
@@ -441,8 +512,8 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
             version=DEFAULT_VERSION,
             gemini_api_key=settings.GEMINI_API_KEY,
             groq_api_key=settings.GROQ_API_KEY,
-            mistral_api_key=settings.MISTRAL_API_KEY,
-            openrouter_api_key=settings.OPENROUTER_API_KEY,
+            ollama_api_key=settings.OLLAMA_API_KEY,
+            ollama_base_url=settings.OLLAMA_BASE_URL,
             google_cse_api_key=settings.GOOGLE_CSE_API_KEY,
             google_cse_cx_id=settings.GOOGLE_CSE_CX_ID,
             subscription_tier=DEFAULT_SUBSCRIPTION_TIER,
@@ -464,11 +535,11 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         if not user_settings.groq_api_key and settings.GROQ_API_KEY:
             user_settings.groq_api_key = settings.GROQ_API_KEY
             dirty = True
-        if not user_settings.mistral_api_key and settings.MISTRAL_API_KEY:
-            user_settings.mistral_api_key = settings.MISTRAL_API_KEY
+        if not getattr(user_settings, "ollama_api_key", None) and settings.OLLAMA_API_KEY:
+            user_settings.ollama_api_key = settings.OLLAMA_API_KEY
             dirty = True
-        if not user_settings.openrouter_api_key and settings.OPENROUTER_API_KEY:
-            user_settings.openrouter_api_key = settings.OPENROUTER_API_KEY
+        if not getattr(user_settings, "ollama_base_url", None) and settings.OLLAMA_BASE_URL:
+            user_settings.ollama_base_url = settings.OLLAMA_BASE_URL
             dirty = True
         if not user_settings.google_cse_api_key and settings.GOOGLE_CSE_API_KEY:
             user_settings.google_cse_api_key = settings.GOOGLE_CSE_API_KEY
@@ -476,8 +547,12 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         if not user_settings.google_cse_cx_id and settings.GOOGLE_CSE_CX_ID:
             user_settings.google_cse_cx_id = settings.GOOGLE_CSE_CX_ID
             dirty = True
-        if not user_settings.database_url or user_settings.database_url != settings.DATABASE_URL:
-            user_settings.database_url = settings.DATABASE_URL
+
+        from app.core.database import normalize_database_url
+        norm_db = normalize_database_url(user_settings.database_url)
+        norm_settings = normalize_database_url(settings.DATABASE_URL)
+        if not user_settings.database_url or norm_db != norm_settings:
+            user_settings.database_url = norm_settings
             dirty = True
 
         if dirty:
@@ -489,10 +564,10 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         settings.GEMINI_API_KEY = user_settings.gemini_api_key
     if user_settings.groq_api_key:
         settings.GROQ_API_KEY = user_settings.groq_api_key
-    if user_settings.mistral_api_key:
-        settings.MISTRAL_API_KEY = user_settings.mistral_api_key
-    if user_settings.openrouter_api_key:
-        settings.OPENROUTER_API_KEY = user_settings.openrouter_api_key
+    if getattr(user_settings, "ollama_api_key", None):
+        settings.OLLAMA_API_KEY = user_settings.ollama_api_key
+    if getattr(user_settings, "ollama_base_url", None):
+        settings.OLLAMA_BASE_URL = user_settings.ollama_base_url
     if user_settings.google_cse_api_key:
         settings.GOOGLE_CSE_API_KEY = user_settings.google_cse_api_key
     if user_settings.google_cse_cx_id:
@@ -514,8 +589,7 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
 provider_health_cache: dict[str, str] = {
     "gemini": "unconfigured",
     "groq": "unconfigured",
-    "openrouter": "unconfigured",
-    "mistral": "unconfigured",
+    "ollama": "unconfigured",
 }
 
 
@@ -525,10 +599,8 @@ def get_current_provider_health(record) -> dict[str, str]:
         health["gemini"] = "unconfigured"
     if not record.groq_api_key or not record.groq_api_key.strip():
         health["groq"] = "unconfigured"
-    if not record.mistral_api_key or not record.mistral_api_key.strip():
-        health["mistral"] = "unconfigured"
-    if not record.openrouter_api_key or not record.openrouter_api_key.strip():
-        health["openrouter"] = "unconfigured"
+    if not getattr(record, "ollama_api_key", None) or not record.ollama_api_key.strip():
+        health["ollama"] = "unconfigured"
     return health
 
 
@@ -545,8 +617,8 @@ async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
         version=record.version or DEFAULT_VERSION,
         gemini_api_key_configured=bool(record.gemini_api_key and record.gemini_api_key.strip()),
         groq_api_key_configured=bool(record.groq_api_key and record.groq_api_key.strip()),
-        openrouter_api_key_configured=bool(record.openrouter_api_key and record.openrouter_api_key.strip()),
-        mistral_api_key_configured=bool(record.mistral_api_key and record.mistral_api_key.strip()),
+        ollama_api_key_configured=bool(getattr(record, "ollama_api_key", None) and record.ollama_api_key.strip()),
+        ollama_base_url=getattr(record, "ollama_base_url", None) or settings.OLLAMA_BASE_URL,
         google_cse_api_key_configured=bool(record.google_cse_api_key and record.google_cse_api_key.strip()),
         google_cse_cx_id_configured=bool(record.google_cse_cx_id and record.google_cse_cx_id.strip()),
         subscription_tier=record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER,
@@ -576,12 +648,12 @@ async def update_user_settings(
         if "GROQ_API_KEY" in parsed:
             record.groq_api_key = parsed["GROQ_API_KEY"].strip() or None
             settings.GROQ_API_KEY = record.groq_api_key
-        if "MISTRAL_API_KEY" in parsed:
-            record.mistral_api_key = parsed["MISTRAL_API_KEY"].strip() or None
-            settings.MISTRAL_API_KEY = record.mistral_api_key
-        if "OPENROUTER_API_KEY" in parsed:
-            record.openrouter_api_key = parsed["OPENROUTER_API_KEY"].strip() or None
-            settings.OPENROUTER_API_KEY = record.openrouter_api_key
+        if "OLLAMA_API_KEY" in parsed:
+            record.ollama_api_key = parsed["OLLAMA_API_KEY"].strip() or None
+            settings.OLLAMA_API_KEY = record.ollama_api_key
+        if "OLLAMA_BASE_URL" in parsed:
+            record.ollama_base_url = parsed["OLLAMA_BASE_URL"].strip() or settings.OLLAMA_BASE_URL
+            settings.OLLAMA_BASE_URL = record.ollama_base_url
         if "GOOGLE_CSE_API_KEY" in parsed:
             record.google_cse_api_key = parsed["GOOGLE_CSE_API_KEY"].strip() or None
             settings.GOOGLE_CSE_API_KEY = record.google_cse_api_key
@@ -609,12 +681,12 @@ async def update_user_settings(
     if req.groq_api_key is not None:
         record.groq_api_key = req.groq_api_key.strip() or None
         settings.GROQ_API_KEY = record.groq_api_key
-    if req.mistral_api_key is not None:
-        record.mistral_api_key = req.mistral_api_key.strip() or None
-        settings.MISTRAL_API_KEY = record.mistral_api_key
-    if req.openrouter_api_key is not None:
-        record.openrouter_api_key = req.openrouter_api_key.strip() or None
-        settings.OPENROUTER_API_KEY = record.openrouter_api_key
+    if req.ollama_api_key is not None:
+        record.ollama_api_key = req.ollama_api_key.strip() or None
+        settings.OLLAMA_API_KEY = record.ollama_api_key
+    if req.ollama_base_url is not None:
+        record.ollama_base_url = req.ollama_base_url.strip() or settings.OLLAMA_BASE_URL
+        settings.OLLAMA_BASE_URL = record.ollama_base_url
     if req.google_cse_api_key is not None:
         record.google_cse_api_key = req.google_cse_api_key.strip() or None
         settings.GOOGLE_CSE_API_KEY = record.google_cse_api_key
@@ -648,14 +720,9 @@ async def update_user_settings(
             await validate_gemini_key(record.gemini_api_key)
         except Exception:
             pass
-    if record.mistral_api_key and provider_health_cache.get("mistral") != "valid":
+    if getattr(record, "ollama_api_key", None) and provider_health_cache.get("ollama") != "valid":
         try:
-            await validate_mistral_key(record.mistral_api_key)
-        except Exception:
-            pass
-    if record.openrouter_api_key and provider_health_cache.get("openrouter") != "valid":
-        try:
-            await validate_openrouter_key(record.openrouter_api_key)
+            await validate_ollama_key(record.ollama_api_key, record.ollama_base_url)
         except Exception:
             pass
 
@@ -894,21 +961,28 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
     )
 
 
-async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationStatus:
+async def validate_ollama_key(
+    api_key: Optional[str],
+    base_url: Optional[str] = None,
+) -> ProviderValidationStatus:
     if not api_key or not api_key.strip():
-        provider_health_cache["openrouter"] = "unconfigured"
+        provider_health_cache["ollama"] = "unconfigured"
         return ProviderValidationStatus(
             status="unconfigured",
-            message="No OpenRouter API Key provided.",
-            model_tested="meta-llama/llama-3.1-8b-instruct",
+            message="No Ollama API Key provided.",
+            model_tested="gpt-oss:120b",
         )
     clean_key = api_key.strip()
-    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=clean_key)
+    clean_base = (base_url or settings.OLLAMA_BASE_URL or "https://ollama.com/v1").rstrip("/")
+    client = AsyncOpenAI(base_url=clean_base, api_key=clean_key)
     models_to_try = [
-        "meta-llama/llama-3.1-8b-instruct",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemini-2.0-flash-exp:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
+        "gpt-oss:120b",
+        "gpt-oss:20b",
+        "gemma4:31b",
+        "nemotron-3-nano:30b",
+        "nemotron-3-super",
+        "nemotron-3-ultra",
+        "beam",
     ]
 
     last_err = ""
@@ -920,74 +994,29 @@ async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationS
                 max_tokens=1,
             )
             if resp.choices:
-                provider_health_cache["openrouter"] = "valid"
+                provider_health_cache["ollama"] = "valid"
                 return ProviderValidationStatus(
                     status="valid",
-                    message=f"Connected successfully to OpenRouter ({model_name}).",
+                    message=f"Connected successfully to Ollama Cloud ({model_name}).",
                     model_tested=model_name,
                 )
         except Exception as e:
             err_str = str(e)
             last_err = err_str
-            if "404" in err_str or "unavailable for free" in err_str:
+            if "404" in err_str or "not found" in err_str.lower():
                 continue
-            provider_health_cache["openrouter"] = "invalid"
+            provider_health_cache["ollama"] = "invalid"
             return ProviderValidationStatus(
                 status="invalid",
-                message=f"OpenRouter connection failed: {err_str}",
+                message=f"Ollama connection failed: {err_str}",
                 model_tested=model_name,
             )
-    provider_health_cache["openrouter"] = "invalid"
+    provider_health_cache["ollama"] = "invalid"
     return ProviderValidationStatus(
         status="invalid",
-        message=f"OpenRouter connection failed: {last_err or 'No accessible OpenRouter models found.'}",
-        model_tested="meta-llama/llama-3.1-8b-instruct",
+        message=f"Ollama connection failed: {last_err or 'No accessible Ollama models found.'}",
+        model_tested="gpt-oss:120b",
     )
-
-
-async def validate_mistral_key(api_key: Optional[str]) -> ProviderValidationStatus:
-    if not api_key or not api_key.strip():
-        provider_health_cache["mistral"] = "unconfigured"
-        return ProviderValidationStatus(
-            status="unconfigured",
-            message="No Mistral API Key provided.",
-            model_tested="mistral-ocr-latest",
-        )
-    clean_key = api_key.strip()
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                "https://api.mistral.ai/v1/models",
-                headers={"Authorization": f"Bearer {clean_key}"},
-            )
-            if resp.status_code == 200:
-                provider_health_cache["mistral"] = "valid"
-                return ProviderValidationStatus(
-                    status="valid",
-                    message="Connected successfully to Mistral AI (OCR & free models ready).",
-                    model_tested="mistral-ocr-latest",
-                )
-            elif resp.status_code in (401, 403):
-                provider_health_cache["mistral"] = "invalid"
-                return ProviderValidationStatus(
-                    status="invalid",
-                    message=f"Mistral authentication failed (HTTP {resp.status_code}): Invalid API key.",
-                    model_tested="mistral-ocr-latest",
-                )
-            else:
-                provider_health_cache["mistral"] = "invalid"
-                return ProviderValidationStatus(
-                    status="invalid",
-                    message=f"Mistral API returned HTTP {resp.status_code}: {resp.text[:120]}",
-                    model_tested="mistral-ocr-latest",
-                )
-    except Exception as e:
-        provider_health_cache["mistral"] = "invalid"
-        return ProviderValidationStatus(
-            status="invalid",
-            message=f"Mistral connection failed: {str(e)}",
-            model_tested="mistral-ocr-latest",
-        )
 
 
 async def validate_google_cse_keys(
@@ -1016,32 +1045,29 @@ async def validate_all_settings(
 
     gemini_key = req.gemini_api_key if (req and req.gemini_api_key is not None) else record.gemini_api_key
     groq_key = req.groq_api_key if (req and req.groq_api_key is not None) else record.groq_api_key
-    mistral_key = req.mistral_api_key if (req and req.mistral_api_key is not None) else record.mistral_api_key
-    openrouter_key = req.openrouter_api_key if (req and req.openrouter_api_key is not None) else record.openrouter_api_key
+    ollama_key = req.ollama_api_key if (req and req.ollama_api_key is not None) else getattr(record, "ollama_api_key", None)
+    ollama_base = req.ollama_base_url if (req and req.ollama_base_url is not None) else getattr(record, "ollama_base_url", None)
     cse_key = req.google_cse_api_key if (req and req.google_cse_api_key is not None) else record.google_cse_api_key
     cse_cx = req.google_cse_cx_id if (req and req.google_cse_cx_id is not None) else record.google_cse_cx_id
 
     gemini_status = await validate_gemini_key(gemini_key)
     groq_status = await validate_groq_key(groq_key)
-    mistral_status = await validate_mistral_key(mistral_key)
-    openrouter_status = await validate_openrouter_key(openrouter_key)
+    ollama_status = await validate_ollama_key(ollama_key, ollama_base)
     cse_status = await validate_google_cse_keys(cse_key, cse_cx)
 
     provider_health_cache["gemini"] = gemini_status.status
     provider_health_cache["groq"] = groq_status.status
-    provider_health_cache["mistral"] = mistral_status.status
-    provider_health_cache["openrouter"] = openrouter_status.status
+    provider_health_cache["ollama"] = ollama_status.status
 
     overall_ready = any(
-        s.status == "valid" for s in [gemini_status, groq_status, mistral_status, openrouter_status]
+        s.status == "valid" for s in [gemini_status, groq_status, ollama_status]
     )
 
     return SettingsValidationResponse(
         gemini=gemini_status,
         groq=groq_status,
-        openrouter=openrouter_status,
+        ollama=ollama_status,
         google_cse=cse_status,
-        mistral=mistral_status,
         overall_ready=overall_ready,
     )
 
@@ -1059,7 +1085,7 @@ def get_default_job_templates() -> List[dict]:
 
 
 async def sync_ai_instructions_to_database(
-    db: AsyncSession, force: bool = False
+    db: AsyncSession, force: bool = False, commit: bool = True
 ) -> AIInstruction:
     """
     Synchronizes RAG & AI instructions from rag_ai_instructions.json into the active database.
@@ -1084,8 +1110,9 @@ async def sync_ai_instructions_to_database(
             modified_timestamp=schema.modified_timestamp,
         )
         db.add(inst)
-        await db.commit()
-        await db.refresh(inst)
+        if commit:
+            await db.commit()
+            await db.refresh(inst)
         logger.info(f"[AI Instructions Sync] Initialized AIInstruction '{schema.name}' in database (timestamp: {schema.modified_timestamp}).")
         return inst
 
@@ -1107,8 +1134,9 @@ async def sync_ai_instructions_to_database(
         existing.description = schema.description
         existing.modified_timestamp = schema.modified_timestamp
         existing.updated_at = utc_now()
-        await db.commit()
-        await db.refresh(existing)
+        if commit:
+            await db.commit()
+            await db.refresh(existing)
     else:
         logger.info(f"[AI Instructions Sync] AI instructions '{schema.name}' are up to date in database (timestamp: {existing.modified_timestamp}).")
 
@@ -1269,9 +1297,10 @@ async def sync_global_defaults(db: AsyncSession, force: bool = False) -> Default
         settings_synced = True
 
     # 3. Sync RAG & AI Instructions
-    await sync_ai_instructions_to_database(db, force=force)
+    await sync_ai_instructions_to_database(db, force=force, commit=False)
 
     await db.commit()
+    await db.refresh(record)
 
     msg = f"Synced schema into database: {inserted} inserted, {updated} updated, {unchanged} unchanged."
     if settings_synced:

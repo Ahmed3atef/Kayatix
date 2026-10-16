@@ -6,7 +6,7 @@ from app.services.pdf_service import (
     encode_pdf_to_base64,
     extract_pdf_content,
     extract_text_with_gemini_vision,
-    extract_text_with_mistral_ocr,
+    extract_text_with_pypdf,
     extract_text_with_llamaparse,
 )
 from app.services.ai_evaluator import (
@@ -67,72 +67,40 @@ async def test_extract_text_with_gemini_vision_success():
         assert "Senior Cloud Architect" in result
 
 
-# --- Mistral AI OCR Tests ---
+# --- Local pypdf Fallback Tests ---
 
-@pytest.mark.asyncio
-async def test_extract_text_with_mistral_ocr_missing_key():
-    with patch.object(settings, "MISTRAL_API_KEY", None):
-        with pytest.raises(ValueError, match="MISTRAL_API_KEY is not configured"):
-            await extract_text_with_mistral_ocr(b"%PDF dummy bytes", api_key=None)
+def test_extract_text_with_pypdf_empty_bytes():
+    with pytest.raises(ValueError, match="Empty PDF file bytes provided"):
+        extract_text_with_pypdf(b"")
 
 
-@pytest.mark.asyncio
-async def test_extract_text_with_mistral_ocr_httpx_success():
-    mock_ocr_response = {
-        "pages": [
-            {
-                "index": 0,
-                "markdown": "# Sarah Connor\nStaff Site Reliability Engineer with Kubernetes expertise.",
-            },
-            {
-                "index": 1,
-                "markdown": "## Experience\n- Lead Infrastructure Architect at TechCorp\n- Implemented zero-downtime CI/CD",
-            },
-        ],
-        "model": "mistral-ocr-latest",
-    }
+def test_extract_text_with_pypdf_success():
+    sample_text = (
+        "Jane Doe Senior Software Engineer\n"
+        "Over 8 years experience building FastAPI backends, Docker containers, and PostgreSQL databases."
+    )
+    with patch("pypdf.PdfReader") as mock_reader_cls:
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = sample_text
+        mock_reader = MagicMock()
+        mock_reader.pages = [mock_page]
+        mock_reader_cls.return_value = mock_reader
 
-    with patch("httpx.AsyncClient.post") as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = mock_ocr_response
-        mock_post.return_value = mock_resp
-
-        markdown_text = await extract_text_with_mistral_ocr(
-            b"%PDF-1.4 dummy resume", api_key="test_mistral_key"
-        )
-
-        assert "Sarah Connor" in markdown_text
-        assert "Staff Site Reliability Engineer" in markdown_text
-        assert "Page 1" in markdown_text
-        assert "Page 2" in markdown_text
+        result = extract_text_with_pypdf(b"%PDF-1.4 dummy", max_chars=18000)
+        assert "Jane Doe" in result
+        assert "Senior Software Engineer" in result
 
 
-@pytest.mark.asyncio
-async def test_extract_text_with_mistral_ocr_rate_limit_retry():
-    """Verifies that 429 triggers exponential backoff retry on free tier."""
-    mock_ocr_response = {
-        "pages": [{"index": 0, "markdown": "Extracted text after rate limit retry with sufficient length for test."}],
-    }
+def test_extract_text_with_pypdf_scanned_image_too_short():
+    with patch("pypdf.PdfReader") as mock_reader_cls:
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Short"
+        mock_reader = MagicMock()
+        mock_reader.pages = [mock_page]
+        mock_reader_cls.return_value = mock_reader
 
-    mock_resp_429 = MagicMock()
-    mock_resp_429.status_code = 429
-    mock_resp_429.text = "Rate limit exceeded"
-
-    mock_resp_200 = MagicMock()
-    mock_resp_200.status_code = 200
-    mock_resp_200.json.return_value = mock_ocr_response
-
-    with (
-        patch("httpx.AsyncClient.post", side_effect=[mock_resp_429, mock_resp_200]) as mock_post,
-        patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
-    ):
-        result = await extract_text_with_mistral_ocr(
-            b"%PDF dummy", api_key="valid_key", max_retries=2, initial_backoff=0.01
-        )
-        assert "Extracted text after rate limit retry" in result
-        assert mock_post.call_count == 2
-        mock_sleep.assert_called_once()
+        with pytest.raises(ValueError, match="scanned image without selectable text"):
+            extract_text_with_pypdf(b"%PDF-1.4 dummy")
 
 
 # --- LlamaParse Cloud Tests ---
@@ -184,35 +152,11 @@ async def test_extract_pdf_content_tier1_gemini():
 
 
 @pytest.mark.asyncio
-async def test_extract_pdf_content_tier2_mistral_fallback():
+async def test_extract_pdf_content_tier2_llamaparse_fallback():
     with (
         patch(
             "app.services.pdf_service.extract_text_with_gemini_vision",
             side_effect=RuntimeError("Gemini rate limit 429"),
-        ),
-        patch(
-            "app.services.pdf_service.extract_text_with_mistral_ocr",
-            new_callable=AsyncMock,
-            return_value="Maria Lead - DevOps Architect with Kubernetes and Terraform experience",
-        ),
-    ):
-        text, method = await extract_pdf_content(
-            b"%PDF dummy", gemini_api_key="failing_key", mistral_api_key="valid_key"
-        )
-        assert method == "mistral_ocr"
-        assert "Maria Lead" in text
-
-
-@pytest.mark.asyncio
-async def test_extract_pdf_content_tier3_llamaparse_fallback():
-    with (
-        patch(
-            "app.services.pdf_service.extract_text_with_gemini_vision",
-            side_effect=RuntimeError("Gemini failed"),
-        ),
-        patch(
-            "app.services.pdf_service.extract_text_with_mistral_ocr",
-            side_effect=RuntimeError("Mistral failed"),
         ),
         patch(
             "app.services.pdf_service.extract_text_with_llamaparse",
@@ -228,6 +172,24 @@ async def test_extract_pdf_content_tier3_llamaparse_fallback():
 
 
 @pytest.mark.asyncio
+async def test_extract_pdf_content_tier3_pypdf_fallback():
+    sample_cv = "Sara Ali - Senior Database Administrator with PostgreSQL and Redis experience."
+    with (
+        patch(
+            "app.services.pdf_service.extract_text_with_gemini_vision",
+            side_effect=RuntimeError("Gemini failed"),
+        ),
+        patch(
+            "app.services.pdf_service.extract_text_with_pypdf",
+            return_value=sample_cv,
+        ),
+    ):
+        text, method = await extract_pdf_content(b"%PDF dummy")
+        assert method == "pypdf_local_parser"
+        assert "Sara Ali" in text
+
+
+@pytest.mark.asyncio
 async def test_extract_pdf_content_all_fail():
     with (
         patch(
@@ -235,15 +197,11 @@ async def test_extract_pdf_content_all_fail():
             side_effect=RuntimeError("Gemini failed"),
         ),
         patch(
-            "app.services.pdf_service.extract_text_with_mistral_ocr",
-            side_effect=RuntimeError("Mistral failed"),
-        ),
-        patch(
-            "app.services.pdf_service.extract_text_with_llamaparse",
-            side_effect=RuntimeError("LlamaParse failed"),
+            "app.services.pdf_service.extract_text_with_pypdf",
+            side_effect=RuntimeError("pypdf unreadable image"),
         ),
     ):
-        with pytest.raises(RuntimeError, match="All cloud PDF OCR providers failed"):
+        with pytest.raises(RuntimeError, match="All PDF extraction options failed"):
             await extract_pdf_content(b"%PDF dummy")
 
 
@@ -280,7 +238,7 @@ async def test_ai_evaluator_single_shot_gemini():
             pdf_bytes=b"%PDF dummy",
             job_description="Senior Python Engineer with FastAPI and Docker",
         )
-        assert pipeline == "gemini-2.5-flash-single-shot"
+        assert pipeline.endswith("-single-shot")
         assert res.candidate_name == "Jane Doe"
         assert res.match_percentage == 94
 
@@ -305,7 +263,7 @@ async def test_ai_evaluator_fallback_to_groq_when_gemini_fails():
         patch(
             "app.services.ai_evaluator.extract_pdf_content",
             new_callable=AsyncMock,
-            return_value=("Extracted Resume Markdown Content", "mistral_ocr"),
+            return_value=("Extracted Resume Markdown Content", "pypdf_local_parser"),
         ),
         patch("app.services.ai_evaluator.AsyncOpenAI") as mock_openai_cls,
     ):

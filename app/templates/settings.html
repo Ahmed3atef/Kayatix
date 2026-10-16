@@ -104,40 +104,35 @@
                                     <div class="form-text">Secondary fallback: <code>llama-3.3-70b-versatile</code> / <code>llama-3.1-8b-instant</code> on high-speed LPUs. Rate limit: 30 RPM.</div>
                                 </div>
 
-                                <!-- Mistral AI (OCR & Free Models) -->
+                                <!-- Ollama Cloud (Model Pool) -->
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <label for="mistralKey" class="form-label fw-semibold mb-0">
-                                            Mistral AI API Key <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1"><i class="bi bi-file-earmark-text me-1"></i>High-Fidelity PDF OCR</span> <span class="badge bg-secondary-subtle text-secondary border ms-1">Free Experiment Tier &bull; 1 RPS</span>
+                                        <label for="ollamaKey" class="form-label fw-semibold mb-0">
+                                            Ollama API Key <span class="badge bg-secondary-subtle text-secondary border ms-1">Priority 3 &bull; Cloud Model Pool</span>
                                         </label>
-                                        <a href="https://console.mistral.ai/api-keys/" target="_blank" class="small text-decoration-none">
-                                            <i class="bi bi-box-arrow-up-right"></i> Get Mistral Key
+                                        <a href="https://ollama.com/settings/keys" target="_blank" class="small text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i> Get Ollama Key
                                         </a>
                                     </div>
                                     <div class="input-group">
-                                        <span class="input-group-text"><i class="bi bi-file-earmark-pdf text-muted"></i></span>
-                                        <input type="password" class="form-control font-monospace" id="mistralKey" placeholder="Your Mistral API Key..." value="{{ settings.mistral_api_key or '' }}">
-                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="mistralKey"><i class="bi bi-eye"></i></button>
+                                        <span class="input-group-text"><i class="bi bi-cloud text-muted"></i></span>
+                                        <input type="password" class="form-control font-monospace" id="ollamaKey" placeholder="Your Ollama API Key..." value="{{ settings.ollama_api_key or '' }}">
+                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="ollamaKey"><i class="bi bi-eye"></i></button>
                                     </div>
-                                    <div class="form-text">Powers state-of-the-art document OCR (<code>mistral-ocr-latest</code>) on uploaded resumes (scanned images, complex tables, multi-column layouts) &amp; free tier evaluation (<code>mistral-small-latest</code>).</div>
+                                    <div class="form-text">Ollama Cloud models pool fallback: <code>beam</code>, <code>gemma4:31b</code>, <code>gpt-oss:120b</code>, <code>gpt-oss:20b</code>, <code>nemotron-3-nano:30b</code>, <code>nemotron-3-super</code>, <code>nemotron-3-ultra</code>.</div>
                                 </div>
 
-                                <!-- OpenRouter -->
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <label for="openrouterKey" class="form-label fw-semibold mb-0">
-                                            OpenRouter API Key <span class="badge bg-secondary-subtle text-secondary border ms-1">Priority 3 &bull; Fallback Pool</span>
+                                        <label for="ollamaBaseUrl" class="form-label fw-semibold mb-0">
+                                            Ollama Base URL
                                         </label>
-                                        <a href="https://openrouter.ai/settings/keys" target="_blank" class="small text-decoration-none">
-                                            <i class="bi bi-box-arrow-up-right"></i> Get OpenRouter Key
-                                        </a>
                                     </div>
                                     <div class="input-group">
-                                        <span class="input-group-text"><i class="bi bi-diagram-3 text-muted"></i></span>
-                                        <input type="password" class="form-control font-monospace" id="openrouterKey" placeholder="sk-or-v1-..." value="{{ settings.openrouter_api_key or '' }}">
-                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="openrouterKey"><i class="bi bi-eye"></i></button>
+                                        <span class="input-group-text"><i class="bi bi-link-45deg text-muted"></i></span>
+                                        <input type="text" class="form-control font-monospace" id="ollamaBaseUrl" placeholder="https://ollama.com/v1" value="{{ settings.ollama_base_url or 'https://ollama.com/v1' }}">
                                     </div>
-                                    <div class="form-text">Tertiary fallback: <code>meta-llama/llama-3.1-8b-instruct</code> pool.</div>
+                                    <div class="form-text">OpenAI-compatible endpoint for Ollama Cloud (defaults to <code>https://ollama.com/v1</code>).</div>
                                 </div>
                             </div>
 
@@ -198,7 +193,7 @@
                                         </label>
                                         <select class="form-select" id="evaluationMode">
                                             <option value="llm_cascade" selected>
-                                                Cloud LLM Cascade (Full LLM Processing: Gemini 2.5 Flash &rarr; Groq Llama 3.3 70B &rarr; OpenRouter)
+                                                Cloud LLM Cascade (Full LLM Processing: Gemini 2.5 Flash &rarr; Groq Llama 3.3 70B &rarr; Ollama Cloud)
                                             </option>
                                         </select>
                                         <div class="form-text">
@@ -414,8 +409,8 @@
         return {
             geminiKey: document.getElementById('geminiKey')?.value ?? '',
             groqKey: document.getElementById('groqKey')?.value ?? '',
-            mistralKey: document.getElementById('mistralKey')?.value ?? '',
-            openrouterKey: document.getElementById('openrouterKey')?.value ?? '',
+            ollamaKey: document.getElementById('ollamaKey')?.value ?? '',
+            ollamaBaseUrl: document.getElementById('ollamaBaseUrl')?.value ?? '',
             googleCseCx: document.getElementById('googleCseCx')?.value ?? '',
             googleCseKey: document.getElementById('googleCseKey')?.value ?? '',
             evaluationMode: document.getElementById('evaluationMode')?.value ?? '',
@@ -446,7 +441,7 @@
 
     // Attach listeners to all inputs in settingsForm
     const monitoredFields = [
-        'geminiKey', 'groqKey', 'mistralKey', 'openrouterKey', 'googleCseCx', 
+        'geminiKey', 'groqKey', 'ollamaKey', 'ollamaBaseUrl', 'googleCseCx', 
         'googleCseKey', 'evaluationMode', 'subscriptionTier', 'rateLimitRpm'
     ];
 
@@ -478,8 +473,8 @@
         const payload = {
             gemini_api_key: document.getElementById('geminiKey').value,
             groq_api_key: document.getElementById('groqKey').value,
-            mistral_api_key: document.getElementById('mistralKey').value,
-            openrouter_api_key: document.getElementById('openrouterKey').value,
+            ollama_api_key: document.getElementById('ollamaKey').value,
+            ollama_base_url: document.getElementById('ollamaBaseUrl').value,
             google_cse_cx_id: document.getElementById('googleCseCx').value,
             evaluation_mode: document.getElementById('evaluationMode').value,
             subscription_tier: document.getElementById('subscriptionTier').value,
@@ -522,13 +517,13 @@
         resultCard.classList.remove('d-none');
         badge.className = 'badge bg-warning text-dark';
         badge.innerText = 'Testing...';
-        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, Mistral, OpenRouter, and Google Search Engine...</div>';
+        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, Ollama Cloud, and Google Search Engine...</div>';
 
         const payload = {
             gemini_api_key: document.getElementById('geminiKey').value,
             groq_api_key: document.getElementById('groqKey').value,
-            mistral_api_key: document.getElementById('mistralKey').value,
-            openrouter_api_key: document.getElementById('openrouterKey').value,
+            ollama_api_key: document.getElementById('ollamaKey').value,
+            ollama_base_url: document.getElementById('ollamaBaseUrl').value,
             google_cse_cx_id: document.getElementById('googleCseCx').value
         };
 
@@ -544,8 +539,7 @@
             const providers = [
                 { name: 'Google Gemini', item: data.gemini, icon: 'bi-robot' },
                 { name: 'Groq Cloud LPU', item: data.groq, icon: 'bi-lightning-charge' },
-                { name: 'Mistral AI (OCR & LLM)', item: data.mistral, icon: 'bi-file-earmark-text' },
-                { name: 'OpenRouter Model Pool', item: data.openrouter, icon: 'bi-diagram-3' },
+                { name: 'Ollama Cloud Model Pool', item: data.ollama, icon: 'bi-cloud' },
                 { name: 'Google Programmable Search (Widget)', item: data.google_cse, icon: 'bi-google' }
             ];
 
@@ -583,14 +577,12 @@
             localStorage.setItem('kayatix_ai_status', JSON.stringify({
                 gemini: data.gemini.status,
                 groq: data.groq.status,
-                mistral: data.mistral?.status,
-                openrouter: data.openrouter.status
+                ollama: data.ollama?.status
             }));
             if (typeof updateFooterBadge === 'function') {
                 updateFooterBadge('footerBadgeGemini', data.gemini.status, 'Priority 1: Gemini 2.5 Flash');
                 updateFooterBadge('footerBadgeGroq', data.groq.status, 'Priority 2: Groq Llama 3.3 70B');
-                updateFooterBadge('footerBadgeMistral', data.mistral ? data.mistral.status : 'unconfigured', 'Mistral AI OCR & Models');
-                updateFooterBadge('footerBadgeOpenRouter', data.openrouter.status, 'Priority 3: OpenRouter Fallback');
+                updateFooterBadge('footerBadgeOllama', data.ollama?.status || 'unconfigured', 'Priority 3: Ollama Cloud Fallback');
             }
 
             if (data.overall_ready) {

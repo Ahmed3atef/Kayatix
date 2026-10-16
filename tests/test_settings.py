@@ -23,7 +23,7 @@ async def test_get_and_update_settings_in_database(db_session):
     update_req = UserSettingsUpdateRequest(
         gemini_api_key="new_gemini_key",
         groq_api_key="new_groq_key",
-        mistral_api_key="new_mistral_key",
+        ollama_api_key="new_ollama_key",
         subscription_tier="pro",
         rate_limit_rpm=30,
     )
@@ -31,14 +31,14 @@ async def test_get_and_update_settings_in_database(db_session):
 
     assert updated.gemini_api_key_configured is True
     assert updated.groq_api_key_configured is True
-    assert updated.mistral_api_key_configured is True
+    assert updated.ollama_api_key_configured is True
     assert updated.subscription_tier == "pro"
     assert updated.rate_limit_rpm == 30
 
     # Verify that in-memory runtime settings were updated
     assert settings.GEMINI_API_KEY == "new_gemini_key"
     assert settings.GROQ_API_KEY == "new_groq_key"
-    assert settings.MISTRAL_API_KEY == "new_mistral_key"
+    assert settings.OLLAMA_API_KEY == "new_ollama_key"
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_validate_all_settings_success(db_session):
     with (
         patch("app.services.settings_service.validate_gemini_key", new_callable=AsyncMock) as m_gemini,
         patch("app.services.settings_service.validate_groq_key", new_callable=AsyncMock) as m_groq,
-        patch("app.services.settings_service.validate_openrouter_key", new_callable=AsyncMock) as m_openrouter,
+        patch("app.services.settings_service.validate_ollama_key", new_callable=AsyncMock) as m_ollama,
         patch("app.services.settings_service.validate_google_cse_keys", new_callable=AsyncMock) as m_cse,
     ):
         from app.schemas.payloads import ProviderValidationStatus
@@ -77,8 +77,8 @@ async def test_validate_all_settings_success(db_session):
         m_groq.return_value = ProviderValidationStatus(
             status="valid", message="Connected", model_tested="llama-3.3-70b-versatile"
         )
-        m_openrouter.return_value = ProviderValidationStatus(
-            status="unconfigured", message="No key", model_tested="meta-llama/llama-3.1-8b-instruct:free"
+        m_ollama.return_value = ProviderValidationStatus(
+            status="unconfigured", message="No key", model_tested="gpt-oss:120b"
         )
         m_cse.return_value = ProviderValidationStatus(
             status="valid", message="Connected", model_tested="Google CSE"
@@ -88,6 +88,7 @@ async def test_validate_all_settings_success(db_session):
         assert resp.overall_ready is True
         assert resp.gemini.status == "valid"
         assert resp.groq.status == "valid"
+        assert resp.ollama.status == "unconfigured"
 
 
 def test_clean_google_cx_id():
@@ -295,36 +296,34 @@ def test_create_engine_for_url_pooling_and_pre_ping():
 
 
 @pytest.mark.asyncio
-async def test_validate_mistral_key_unconfigured():
-    from app.services.settings_service import validate_mistral_key
-    res = await validate_mistral_key("")
+async def test_validate_ollama_key_unconfigured():
+    from app.services.settings_service import validate_ollama_key
+    res = await validate_ollama_key("")
     assert res.status == "unconfigured"
 
 
 @pytest.mark.asyncio
-async def test_validate_mistral_key_valid():
-    from app.services.settings_service import validate_mistral_key
-    with patch("httpx.AsyncClient.get") as mock_get:
+async def test_validate_ollama_key_valid():
+    from app.services.settings_service import validate_ollama_key
+    with patch("openai.resources.chat.completions.AsyncCompletions.create", new_callable=AsyncMock) as mock_create:
         mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
+        mock_resp.choices = [MagicMock()]
+        mock_create.return_value = mock_resp
 
-        res = await validate_mistral_key("valid_mistral_key")
+        res = await validate_ollama_key("valid_ollama_key")
         assert res.status == "valid"
-        assert "Mistral AI" in res.message
+        assert "Ollama Cloud" in res.message
 
 
 @pytest.mark.asyncio
-async def test_validate_mistral_key_invalid():
-    from app.services.settings_service import validate_mistral_key
-    with patch("httpx.AsyncClient.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 401
-        mock_get.return_value = mock_resp
+async def test_validate_ollama_key_invalid():
+    from app.services.settings_service import validate_ollama_key
+    with patch("openai.resources.chat.completions.AsyncCompletions.create", new_callable=AsyncMock) as mock_create:
+        mock_create.side_effect = Exception("401 Unauthorized: Invalid key")
 
-        res = await validate_mistral_key("invalid_key")
+        res = await validate_ollama_key("invalid_key")
         assert res.status == "invalid"
-        assert "Invalid API key" in res.message
+        assert "401" in res.message
 
 
 

@@ -74,8 +74,8 @@ async def test_evaluate_pdf_resume_success(client):
 
 
 @pytest.mark.asyncio
-async def test_evaluate_pdf_resume_with_mistral_ocr(client):
-    """Verifies that PDF resume evaluation uses OCR fallback when single-shot falls back."""
+async def test_evaluate_pdf_resume_with_pypdf_fallback(client):
+    """Verifies that PDF resume evaluation uses pypdf fallback when single-shot falls back."""
     files = {"resume_file": ("resume_scanned.pdf", b"%PDF-1.4 scanned bytes", "application/pdf")}
     data = {"job_description": "We need a Senior Python Engineer with FastAPI"}
 
@@ -86,7 +86,7 @@ async def test_evaluate_pdf_resume_with_mistral_ocr(client):
         matched_skills=["Python", "FastAPI"],
         missing_critical_skills=[],
         years_of_experience=6.5,
-        executive_summary="Evaluated via OCR fallback.",
+        executive_summary="Evaluated via pypdf fallback.",
         red_flags=[],
         tailored_interview_questions=[],
     )
@@ -94,14 +94,14 @@ async def test_evaluate_pdf_resume_with_mistral_ocr(client):
     with patch(
         "app.api.v1.endpoints_evaluation.evaluate_candidate_pipeline",
         new_callable=AsyncMock,
-        return_value=(hr_result, "mistral_ocr+groq-llama-3.3-70b"),
+        return_value=(hr_result, "pypdf_local_parser+groq-llama-3.3-70b"),
     ) as mock_eval:
         response = await client.post("/api/v1/evaluation/resume-pdf", data=data, files=files)
         assert response.status_code == 200
         payload = response.json()
 
-        assert payload["extraction_method"] == "mistral_ocr+groq-llama-3.3-70b"
-        assert payload["provider_used"] == "mistral_ocr+groq-llama-3.3-70b"
+        assert payload["extraction_method"] == "pypdf_local_parser+groq-llama-3.3-70b"
+        assert payload["provider_used"] == "pypdf_local_parser+groq-llama-3.3-70b"
         assert payload["analysis"]["candidate_name"] == "Jane Doe"
         assert payload["analysis"]["match_percentage"] == 92
         mock_eval.assert_called_once()

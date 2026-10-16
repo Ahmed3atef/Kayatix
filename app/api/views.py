@@ -26,43 +26,31 @@ router = APIRouter(include_in_schema=False)
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Main Dashboard: system overview, real-time HR talent metrics, and recent activities."""
+    user_settings = await get_or_create_user_settings(db)
+
+    # 1. Fetch recent evaluations
     stmt = select(EvaluationCache).order_by(desc(EvaluationCache.id)).limit(8)
     recent_evaluations = (await db.execute(stmt)).scalars().all()
 
-    # 1. Total Screened Candidates
-    total_stmt = select(func.count(EvaluationCache.id))
-    total_evals = (await db.execute(total_stmt)).scalar() or 0
+    # 2. Compute aggregate metrics in a single database round-trip
+    stats_stmt = select(EvaluationCache.match_score, EvaluationCache.evaluation_json)
+    rows = (await db.execute(stats_stmt)).all()
+    total_evals = len(rows)
 
-    # 2. Average Benchmark Match Score
-    avg_stmt = select(func.avg(EvaluationCache.match_score))
-    avg_score_raw = (await db.execute(avg_stmt)).scalar()
-    avg_match_score = round(float(avg_score_raw), 1) if avg_score_raw is not None else 0.0
+    scores = [r[0] for r in rows if r[0] is not None]
+    avg_match_score = round(sum(scores) / len(scores), 1) if scores else 0.0
 
-    # 3. Qualified Shortlist (Score >= 75)
-    qualified_stmt = select(func.count(EvaluationCache.id)).where(EvaluationCache.match_score >= 75)
-    qualified_count = (await db.execute(qualified_stmt)).scalar() or 0
+    qualified_count = sum(1 for s in scores if s >= 75)
     qualification_rate = round((qualified_count / total_evals) * 100) if total_evals > 0 else 0
+    moderate_fit_count = sum(1 for s in scores if 50 <= s < 75)
+    low_fit_count = sum(1 for s in scores if s < 50)
 
-    # 4. Average Years of Experience (YOE)
-    all_json_stmt = select(EvaluationCache.evaluation_json)
-    all_jsons = (await db.execute(all_json_stmt)).scalars().all()
     yoe_list = [
-        ev.get("estimated_years_experience")
-        for ev in all_jsons
-        if isinstance(ev, dict) and ev.get("estimated_years_experience") is not None
+        r[1].get("estimated_years_experience")
+        for r in rows
+        if isinstance(r[1], dict) and r[1].get("estimated_years_experience") is not None
     ]
     avg_yoe = round(sum(yoe_list) / len(yoe_list), 1) if yoe_list else 0.0
-
-    # 5. Fit Breakdown for HR distribution
-    mod_fit_stmt = select(func.count(EvaluationCache.id)).where(
-        EvaluationCache.match_score >= 50, EvaluationCache.match_score < 75
-    )
-    moderate_fit_count = (await db.execute(mod_fit_stmt)).scalar() or 0
-
-    low_fit_stmt = select(func.count(EvaluationCache.id)).where(EvaluationCache.match_score < 50)
-    low_fit_count = (await db.execute(low_fit_stmt)).scalar() or 0
-
-    user_settings = await get_or_create_user_settings(db)
 
     return templates.TemplateResponse(
         request=request,

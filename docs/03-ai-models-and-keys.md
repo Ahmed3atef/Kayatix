@@ -6,20 +6,20 @@ Kayatix is powered by real, state-of-the-art Cloud Large Language Models configu
 
 ## 🤖 The Cascade Architecture
 
-Candidate evaluation uses a resilient 4-tier cascade:
+Candidate evaluation uses a resilient 3-tier cloud cascade with zero-cost local CPU fallback:
 
 ```mermaid
 flowchart TD
-    CV["Candidate Resume (PDF)"] --> OCR["Mistral AI OCR (mistral-ocr-latest) / Standard Parser"]
+    CV["Candidate Resume (PDF)"] --> SingleShot["Single-Shot Multimodal Vision (Gemini 2.5 Flash)"]
+    SingleShot -- "Success (50% token & latency savings)" --> Result["Structured JSON Evaluation"]
+    SingleShot -- "Fallback / Rate Limit" --> OCR["Tier 1: Gemini Vision OCR / Tier 2: LlamaParse / Tier 3: pypdf (Local)"]
     OCR --> RAG["RAG Evidence Matrix Chunking"]
     RAG --> P1["1. Google Gemini Flash (Primary)"]
-    P1 -- "Success" --> Result["Structured JSON Evaluation"]
+    P1 -- "Success" --> Result
     P1 -- "429 Quota / 503 Spike / Error" --> P2["2. Groq Cloud LPUs (Secondary)"]
     P2 -- "Success" --> Result
-    P2 -- "Rate Throttled / Unavailable" --> P3["3. Mistral AI (Free Tier: mistral-small / nemo)"]
+    P2 -- "Rate Throttled / Unavailable" --> P3["3. Ollama Cloud Model Pool (Tertiary Fallback)"]
     P3 -- "Success" --> Result
-    P3 -- "Rate Throttled / Unavailable" --> P4["4. OpenRouter Free Pool (Quaternary Fallback)"]
-    P4 -- "Success" --> Result
 ```
 
 ---
@@ -66,21 +66,17 @@ All models in the cascade are guided by structured system instructions:
 
 ### 1. Google Gemini (Google AI Studio)
 * **API Key Format**: `AIzaSy...` (from [Google AI Studio](https://aistudio.google.com/))
-* **Active Models**: `gemini-2.5-flash`, `gemini-1.5-flash`, `gemini-flash-latest`, `gemini-flash-lite-latest`.
-* **503 Spikes**: Automatically falls through modern alternative models before failing over to Groq.
+* **Active Models**: `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-1.5-flash`.
+* **Multimodal Evaluation**: Feeds raw PDF bytes directly into `gemini-2.5-flash` in a single pass.
 
 ### 2. Groq Cloud (Ultra-Fast LPUs)
 * **API Key Format**: `gsk_...` (from [Groq Console](https://console.groq.com/))
-* **Active Models**: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `openai/gpt-oss-120b`, `allam-2-7b`.
+* **Active Models**: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`.
 
-### 3. Mistral AI (High-Fidelity OCR & Free Tier Models)
-* **API Key Format**: `Your Mistral API Key` (from [Mistral Console / La Plateforme](https://console.mistral.ai/api-keys/))
-* **OCR Model**: `mistral-ocr-latest` &mdash; Extracts structured Markdown, tables, multi-column blocks, and scanned text from candidate PDF resumes.
-* **Evaluation Free Tier Models**: `mistral-small-latest`, `open-mistral-nemo`, `open-mistral-7b` (under the free Experiment plan with 1 RPS and automatic exponential backoff retry).
-
-### 4. OpenRouter (Global Free Models Pool)
-* **API Key Format**: `sk-or-v1-...` (from [OpenRouter](https://openrouter.ai/))
-* **Active Models**: `meta-llama/llama-3.1-8b-instruct:free`, `meta-llama/llama-3.3-70b-instruct:free`, `google/gemini-2.0-flash-exp:free`.
+### 3. Ollama Cloud (Model Pool)
+* **API Key Format**: `Your Ollama API Key` (from [Ollama Settings](https://ollama.com/settings/keys))
+* **Base URL**: `https://ollama.com/v1`
+* **Active Models**: `beam`, `gemma4:31b`, `gpt-oss:120b`, `gpt-oss:20b`, `nemotron-3-nano:30b`, `nemotron-3-super`, `nemotron-3-ultra`.
 
 ---
 
