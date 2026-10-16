@@ -57,7 +57,6 @@ class UserSettingsResponse(BaseModel):
     groq_api_key_configured: bool
     ollama_api_key_configured: bool
     ollama_base_url: Optional[str] = "https://ollama.com/v1"
-    google_cse_api_key_configured: bool
     google_cse_cx_id_configured: bool
     subscription_tier: str = "standard"
     evaluation_mode: str = "llm_cascade"
@@ -75,7 +74,6 @@ class UserSettingsUpdateRequest(BaseModel):
     groq_api_key: Optional[str] = None
     ollama_api_key: Optional[str] = None
     ollama_base_url: Optional[str] = None
-    google_cse_api_key: Optional[str] = None
     google_cse_cx_id: Optional[str] = None
     subscription_tier: Optional[str] = None
     evaluation_mode: Optional[str] = None

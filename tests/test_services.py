@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from app.core.config import settings
-from app.schemas.payloads import XRaySearchRequest
+from app.schemas.payloads import XRaySearchRequest, XRayProfileItem
 from app.services.pdf_service import (
     encode_pdf_to_base64,
     extract_pdf_content,
@@ -347,12 +347,10 @@ async def test_execute_linkedin_xray_search_missing_credentials():
         location="Cairo",
     )
     with (
-        patch.object(settings, "GOOGLE_CSE_API_KEY", None),
-        patch.object(settings, "GOOGLE_CSE_CX_ID", None),
         patch.object(settings, "GEMINI_API_KEY", None),
         patch("app.core.database.AsyncSessionLocal", side_effect=Exception("No DB")),
     ):
-        with pytest.raises(ValueError, match="Google Custom Search API credentials are not configured"):
+        with pytest.raises(ValueError, match="Google Gemini API key is not configured"):
             await execute_linkedin_xray_search(req)
 
 
@@ -365,76 +363,41 @@ async def test_execute_linkedin_xray_search_success():
         max_results=2,
     )
 
-    mock_google_response = {
-        "items": [
-            {
-                "title": "Alex Developer - Senior Python Engineer - Tech Corp | LinkedIn",
-                "link": "https://www.linkedin.com/in/alex-dev-12345",
-                "snippet": "Experienced Python Engineer specializing in FastAPI and cloud architectures.",
-            },
-            {
-                "title": "Maria Senior - Tech Lead - Cloud Solutions | LinkedIn",
-                "link": "https://www.linkedin.com/in/maria-senior-67890",
-                "snippet": "Backend Lead with 7+ years of experience in Docker, Kubernetes, and Python APIs.",
-            },
-        ]
-    }
+    mock_profiles = [
+        XRayProfileItem(
+            full_title="Alex Developer - Senior Python Engineer - Tech Corp | LinkedIn",
+            linkedin_url="https://www.linkedin.com/in/alex-dev-12345",
+            snippet="Experienced Python Engineer specializing in FastAPI and cloud architectures.",
+        ),
+        XRayProfileItem(
+            full_title="Maria Senior - Tech Lead - Cloud Solutions | LinkedIn",
+            linkedin_url="https://www.linkedin.com/in/maria-senior-67890",
+            snippet="Backend Lead with 7+ years of experience in Docker, Kubernetes, and Python APIs.",
+        ),
+    ]
 
     with (
-        patch.object(settings, "GOOGLE_CSE_API_KEY", "valid_key"),
-        patch.object(settings, "GOOGLE_CSE_CX_ID", "valid_cx"),
-        patch("httpx.AsyncClient.get") as mock_get,
+        patch.object(settings, "GEMINI_API_KEY", "valid_gemini_key"),
+        patch("app.services.sourcing_service.execute_gemini_grounded_sourcing", return_value=mock_profiles) as mock_grounded,
     ):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = mock_google_response
-        mock_get.return_value = mock_resp
-
         results = await execute_linkedin_xray_search(req)
         assert len(results) == 2
         assert results[0].full_title == "Alex Developer - Senior Python Engineer - Tech Corp | LinkedIn"
         assert results[0].linkedin_url == "https://www.linkedin.com/in/alex-dev-12345"
         assert "FastAPI" in results[0].snippet
+        mock_grounded.assert_called_once_with(req, "valid_gemini_key")
 
 
 @pytest.mark.asyncio
-async def test_execute_linkedin_xray_search_api_error():
+async def test_execute_linkedin_xray_search_gemini_failure():
     req = XRaySearchRequest(
         job_title="Backend Engineer",
         required_skills=["Python"],
         location="Remote",
     )
     with (
-        patch.object(settings, "GOOGLE_CSE_API_KEY", "valid_key"),
-        patch.object(settings, "GOOGLE_CSE_CX_ID", "valid_cx"),
-        patch("httpx.AsyncClient.get") as mock_get,
+        patch.object(settings, "GEMINI_API_KEY", "valid_gemini_key"),
+        patch("app.services.sourcing_service.execute_gemini_grounded_sourcing", side_effect=ValueError("Gemini AI Sourcing could not retrieve profiles")),
     ):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 403
-        mock_resp.text = "Quota exceeded for Google Custom Search"
-        mock_get.return_value = mock_resp
-
-        with pytest.raises(ValueError, match="Google Search API error"):
-            await execute_linkedin_xray_search(req)
-
-
-@pytest.mark.asyncio
-async def test_execute_linkedin_xray_search_google_new_project_restriction():
-    req = XRaySearchRequest(
-        job_title="ERPNext Developer",
-        required_skills=["Frappe", "Python"],
-        location="Cairo",
-    )
-    with (
-        patch.object(settings, "GOOGLE_CSE_API_KEY", "valid_key"),
-        patch.object(settings, "GOOGLE_CSE_CX_ID", "valid_cx"),
-        patch.object(settings, "GEMINI_API_KEY", None),
-        patch("httpx.AsyncClient.get") as mock_get,
-    ):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 403
-        mock_resp.text = '{"error": {"code": 403, "message": "This project does not have the access to Custom Search JSON API.", "status": "PERMISSION_DENIED"}}'
-        mock_get.return_value = mock_resp
-
-        with pytest.raises(ValueError, match="Google has restricted the legacy Custom Search JSON API"):
+        with pytest.raises(ValueError, match="Gemini AI Sourcing could not retrieve profiles"):
             await execute_linkedin_xray_search(req)

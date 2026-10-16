@@ -104,14 +104,10 @@ async def evaluate_candidate_pipeline(
         try:
             client = genai.Client(api_key=gemini_key)
             preferred_models = [
-                "gemini-3.6-flash",
-                "gemini-3.8-flash",
-                "gemini-3.5-flash",
-                "gemini-3.5-flash-lite",
-                "gemini-flash-latest",
                 "gemini-flash-lite-latest",
-                "gemini-2.5-flash",
-                "gemini-1.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-3.8-flash",
+                "gemini-flash-latest",
             ]
             prompt = f"""
             Evaluate the attached PDF Resume against the following Job Description.
@@ -179,24 +175,39 @@ async def evaluate_candidate_pipeline(
     {portfolio_markdown[:6000] if portfolio_markdown else "None"}
     """
 
-    # Try Groq (Llama 3.3 70B)
+    # Try Groq (Llama 3.3 / Llama 3.1 / GPT-OSS / Qwen)
     if groq_key:
-        try:
-            groq_client = AsyncOpenAI(
-                base_url="https://api.groq.com/openai/v1",
-                api_key=groq_key,
-            )
-            resp = await groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": text_prompt}],
-                response_format={"type": "json_object"},
-                temperature=0.1,
-            )
-            raw_json = resp.choices[0].message.content or "{}"
-            cleaned_json = _clean_json(raw_json)
-            return HRAnalysisResult.model_validate_json(cleaned_json), f"{ocr_provider}+groq-llama-3.3-70b"
-        except Exception as e:
-            logger.warning(f"[AI Router] Groq evaluation failed: {e}")
+        groq_client = AsyncOpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=groq_key,
+        )
+        groq_models = [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.8-27b",
+            "llama3-70b-8192",
+        ]
+        for g_model in groq_models:
+            try:
+                resp = await groq_client.chat.completions.create(
+                    model=g_model,
+                    messages=[{"role": "user", "content": text_prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                )
+                raw_json = resp.choices[0].message.content or "{}"
+                cleaned_json = _clean_json(raw_json)
+                tag = "groq-llama-3.3-70b" if "llama-3.3" in g_model else f"groq-{g_model}"
+                return HRAnalysisResult.model_validate_json(cleaned_json), f"{ocr_provider}+{tag}"
+            except Exception as e:
+                err_msg = str(e)
+                if "404" in err_msg or "model_not_found" in err_msg.lower() or "not exist" in err_msg.lower():
+                    logger.info(f"[AI Router] Groq model '{g_model}' not accessible, trying next Groq model...")
+                    continue
+                logger.warning(f"[AI Router] Groq evaluation on '{g_model}' failed: {e}")
+                break
 
     # Try Ollama Cloud Models Fallback
     if ollama_key:

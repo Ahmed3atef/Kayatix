@@ -47,11 +47,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "https://ollama.com/v1"
     LLAMA_CLOUD_API_KEY: Optional[str] = None
 
-    # Google X-Ray Search Keys (LinkedIn Legal Sourcing)
-    GOOGLE_SEARCH_API_KEY: Optional[str] = None
-    GOOGLE_CSE_ID: Optional[str] = None
-    GOOGLE_CSE_API_KEY: Optional[str] = None
+    # Google Programmable Search Engine (CSE CX) for Candidate Sourcing
     GOOGLE_CSE_CX_ID: Optional[str] = None
+    GOOGLE_CSE_ID: Optional[str] = None
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./kayatix.db"
 
@@ -64,12 +62,6 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context) -> None:
         super().model_post_init(__context)
-        # Harmonize Google Search / CSE keys
-        if not self.GOOGLE_SEARCH_API_KEY and self.GOOGLE_CSE_API_KEY:
-            self.GOOGLE_SEARCH_API_KEY = self.GOOGLE_CSE_API_KEY
-        elif not self.GOOGLE_CSE_API_KEY and self.GOOGLE_SEARCH_API_KEY:
-            self.GOOGLE_CSE_API_KEY = self.GOOGLE_SEARCH_API_KEY
-
         if not self.GOOGLE_CSE_ID and self.GOOGLE_CSE_CX_ID:
             self.GOOGLE_CSE_ID = self.GOOGLE_CSE_CX_ID
         elif not self.GOOGLE_CSE_CX_ID and self.GOOGLE_CSE_ID:

@@ -55,9 +55,10 @@ Do not include any explanation or markdown formatting, output raw JSON array.
     )
 
     models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
     ]
 
     last_err = None
@@ -96,17 +97,13 @@ Do not include any explanation or markdown formatting, output raw JSON array.
 async def execute_linkedin_xray_search(req: XRaySearchRequest) -> List[XRayProfileItem]:
     """
     Sourcing Pipeline:
-    1. Tries Google Custom Search API if configured.
-    2. If Google Cloud returns 403 (legacy Custom Search JSON API restricted for new projects),
-       automatically falls back to Google Gemini with live Google Search Grounding.
-    3. If neither is available, provides clear guidance to use the 1-Click Search or CSE Web Widget.
+    1. Uses Google Gemini with live Google Search Grounding to discover verified LinkedIn candidate profiles.
+    2. If Gemini key is not configured, provides clear guidance to use 1-Click Search or the embedded CSE Web Widget (zero API keys required).
     """
-    api_key = settings.GOOGLE_CSE_API_KEY
-    cx_id = settings.GOOGLE_CSE_CX_ID
     gemini_key = settings.GEMINI_API_KEY
 
     # Retrieve credentials from database if missing from runtime config
-    if not (api_key and cx_id) or not gemini_key:
+    if not gemini_key:
         try:
             from sqlalchemy import select
             from app.core.database import AsyncSessionLocal
@@ -115,89 +112,18 @@ async def execute_linkedin_xray_search(req: XRaySearchRequest) -> List[XRayProfi
             async with AsyncSessionLocal() as session:
                 stmt = select(UserSettings)
                 db_settings = (await session.execute(stmt)).scalars().first()
-                if db_settings:
-                    api_key = api_key or db_settings.google_cse_api_key
-                    cx_id = cx_id or db_settings.google_cse_cx_id
-                    gemini_key = gemini_key or db_settings.gemini_api_key
-                    if db_settings.google_cse_api_key:
-                        settings.GOOGLE_CSE_API_KEY = db_settings.google_cse_api_key
-                    if db_settings.google_cse_cx_id:
-                        settings.GOOGLE_CSE_CX_ID = db_settings.google_cse_cx_id
-                    if db_settings.gemini_api_key:
-                        settings.GEMINI_API_KEY = db_settings.gemini_api_key
+                if db_settings and db_settings.gemini_api_key:
+                    gemini_key = db_settings.gemini_api_key
+                    settings.GEMINI_API_KEY = db_settings.gemini_api_key
         except Exception:
             pass
 
-    if not (api_key and cx_id) and not gemini_key:
-        logger.warning("[X-Ray Sourcing] Google Custom Search credentials missing.")
+    if not gemini_key:
+        logger.warning("[X-Ray Sourcing] Google Gemini API credentials missing.")
         raise ValueError(
-            "Google Custom Search API credentials are not configured in Settings / .env. "
+            "Google Gemini API key is not configured in Settings / .env for live candidate sourcing. "
             "(Tip: You can use the 1-Click Search on Google button or the CSE Widget without an API key!)"
         )
 
-    # Method A: Google Custom Search JSON API
-    if api_key and cx_id:
-        skills_query = " AND ".join([f'"{skill}"' for skill in req.required_skills[:4]])
-        dork_query = f'site:linkedin.com/in/ "{req.job_title}" AND "{req.location}" AND {skills_query}'
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": api_key,
-            "cx": cx_id,
-            "q": dork_query,
-            "num": req.max_results,
-        }
-
-        logger.info(f"[X-Ray Sourcing] Executing Google CSE search: '{dork_query[:90]}...' (Max results: {req.max_results})")
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
-            if resp.status_code == 200:
-                data = resp.json()
-                results: List[XRayProfileItem] = []
-                for item in data.get("items", []):
-                    results.append(
-                        XRayProfileItem(
-                            full_title=item.get("title", ""),
-                            linkedin_url=item.get("link", ""),
-                            snippet=item.get("snippet", ""),
-                        )
-                    )
-                logger.info(f"[X-Ray Sourcing] Successfully retrieved {len(results)} candidate profile(s) via Google CSE.")
-                return results
-
-            err_text = resp.text
-            logger.error(f"[X-Ray Sourcing] Google Search API error (HTTP {resp.status_code}): {err_text}")
-
-            # If new project restriction is hit, and gemini_key available, try modern Gemini Grounded Search
-            if ("does not have the access to Custom Search JSON API" in err_text or "PERMISSION_DENIED" in err_text or resp.status_code == 403) and gemini_key:
-                logger.info(
-                    "[X-Ray Sourcing] Legacy Custom Search JSON API restricted for this project. "
-                    "Automatically switching to modern Google Gemini with Google Search Grounding..."
-                )
-                try:
-                    return await execute_gemini_grounded_sourcing(req, gemini_key)
-                except Exception as gemini_err:
-                    logger.warning(f"[X-Ray Sourcing] Gemini Search Grounding fallback failed: {gemini_err}")
-
-            if "does not have the access to Custom Search JSON API" in err_text:
-                raise ValueError(
-                    "Google has restricted the legacy Custom Search JSON API for newly created Google Cloud projects "
-                    "('This project does not have the access to Custom Search JSON API'). "
-                    "Google no longer grants new projects access to this legacy API. "
-                    "Please use the '1-Click Search on Google' button or the 'CSE Widget' tab to source candidates instantly with zero API keys."
-                )
-            if "API_KEY_SERVICE_BLOCKED" in err_text or "PERMISSION_DENIED" in err_text:
-                raise ValueError(
-                    "Google Search API error: Requests to Custom Search are blocked (PERMISSION_DENIED / API_KEY_SERVICE_BLOCKED). "
-                    "Please check your Google Cloud Console project restrictions, or use the '1-Click Search on Google' button or 'CSE Widget' tab."
-                )
-            raise ValueError(f"Google Search API error: {err_text}")
-
-    # Method B: Direct Gemini Google Search Grounding (if no CSE keys)
-    if gemini_key:
-        logger.info("[X-Ray Sourcing] Using Google Gemini with Google Search Grounding for candidate discovery...")
-        return await execute_gemini_grounded_sourcing(req, gemini_key)
-
-    raise ValueError(
-        "Google Custom Search API credentials are not configured in Settings / .env. "
-        "(Tip: You can use the 1-Click Search on Google button or the CSE Widget without an API key!)"
-    )
+    logger.info("[X-Ray Sourcing] Using Google Gemini with Google Search Grounding for candidate discovery...")
+    return await execute_gemini_grounded_sourcing(req, gemini_key)

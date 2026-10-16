@@ -261,14 +261,10 @@ async def _call_gemini(
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     preferred_models = [
-        "gemini-3.6-flash",
-        "gemini-3.8-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-latest",
         "gemini-flash-lite-latest",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
     ]
     deduped = preferred_models
 
@@ -387,7 +383,7 @@ async def evaluate_candidate_with_fallback(
             f"Primary provider (Gemini) failed/throttled: {gemini_err}. Failing over to Groq...")
 
     # 3. Try Secondary: Groq Cloud (Fast LPUs)
-    for groq_model in ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "llama-3.1-8b-instant", "llama3-70b-8192"]:
+    for groq_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "llama3-70b-8192"]:
         try:
             raw_json = await _call_openai_compatible_provider(
                 base_url="https://api.groq.com/openai/v1",

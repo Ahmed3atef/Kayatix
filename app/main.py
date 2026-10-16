@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI):
             logger.info(f" -> Google Gemini    : {'[ACTIVE]' if settings.GEMINI_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Groq Cloud       : {'[ACTIVE]' if settings.GROQ_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Ollama Cloud    : {'[ACTIVE]' if settings.OLLAMA_API_KEY else '[NOT SET]'}")
-            logger.info(f" -> Google CSE Key   : {'[ACTIVE]' if settings.GOOGLE_CSE_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Google CSE CX    : {'[ACTIVE]' if settings.GOOGLE_CSE_CX_ID else '[NOT SET]'}")
             logger.info(f" -> Evaluation Mode  : {settings.EVALUATION_MODE}")
             logger.info(f" -> Subscription     : {settings.SUBSCRIPTION_TIER.upper()}")

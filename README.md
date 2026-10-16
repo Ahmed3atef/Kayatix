@@ -135,14 +135,14 @@ To enable multi-provider AI resilience, obtain developer API keys from the follo
 | **Google AI Studio**         | `gemini-2.5-flash`                      | 15 RPM, 1,500 RPD          | [Google AI Studio](https://aistudio.google.com/)                                                                  |
 | **Groq Cloud**               | `llama-3.3-70b-versatile`               | 30 RPM, 14,400 RPD         | [Groq Console](https://console.groq.com/keys)                                                                     |
 | **Ollama Cloud**             | `beam`, `gemma4:31b`, `gpt-oss:120b`, `gpt-oss:20b`, `nemotron-3-nano:30b`, `nemotron-3-super`, `nemotron-3-ultra` | Cloud Model Pool | [Ollama Settings](https://ollama.com/settings/keys) |
-| **Google Custom Search API** | `Google Programmable Search`            | 100 queries / day          | [Google Cloud](https://console.cloud.google.com/) & [Search Engine](https://programmablesearchengine.google.com/) |
+| **Google Programmable Search (Widget)** | `Google Programmable Search (cx)` | 100% Free & Unlimited | [Search Engine Control Panel](https://programmablesearchengine.google.com/) |
 
-### Setting Up Google Custom Search (X-Ray Sourcing):
+### Setting Up Google Candidate Sourcing (Zero API Keys Required):
 
 1. Navigate to [Programmable Search Engine](https://programmablesearchengine.google.com/) and create a new search engine.
 2. Under **Sites to search**, add `linkedin.com/in/*` or select **Search the entire web**.
 3. Copy the **Search engine ID** (`cx`) and set it into the app settings as `GOOGLE_CSE_CX_ID`.
-4. Go to [Google Cloud Console](https://console.cloud.google.com/), enable the **Custom Search API**, generate an API Key, and set it as `GOOGLE_CSE_API_KEY`.
+4. Enjoy unlimited embedded candidate sourcing and 1-Click X-Ray Google search with 0 API keys required! (Automated API sourcing uses Gemini with live Google Search Grounding).
 
 ---
 

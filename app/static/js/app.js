@@ -125,12 +125,15 @@ function buildEvaluationCardHTML(apiData) {
     `).join('') || '<div class="text-muted small">No questions generated.</div>';
 
     let extractionBadge = '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-file-earmark-pdf me-1"></i>Standard Parser</span>';
-    if (apiData.extraction_method === 'gemini_vision_ocr' || apiData.extraction_method === 'multimodal_direct') {
-        extractionBadge = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-eye me-1"></i>Gemini Vision</span>';
-    } else if (apiData.extraction_method === 'llamaparse_cloud') {
-        extractionBadge = '<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cloud-arrow-down me-1"></i>LlamaParse</span>';
-    } else if (apiData.extraction_method === 'pypdf_local') {
-        extractionBadge = '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-cpu me-1"></i>pypdf (Local)</span>';
+    const method = String(apiData.extraction_method || '').toLowerCase();
+    if (method.includes('single-shot') || method.includes('multimodal')) {
+        extractionBadge = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-stars me-1"></i>Gemini Multimodal (Direct)</span>';
+    } else if (method.includes('gemini_vision') || method.includes('gemini-vision')) {
+        extractionBadge = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-eye me-1"></i>Gemini Vision OCR</span>';
+    } else if (method.includes('llamaparse')) {
+        extractionBadge = '<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cloud-arrow-down me-1"></i>LlamaParse Cloud</span>';
+    } else if (method.includes('pypdf')) {
+        extractionBadge = '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-cpu me-1"></i>pypdf (Local Fallback)</span>';
     }
 
     return `

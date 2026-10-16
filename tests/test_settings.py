@@ -113,7 +113,7 @@ async def test_validate_google_cse_keys_cx_only():
     """Verifies that providing only Search Engine ID validates as ready for browser sourcing."""
     from app.services.settings_service import validate_google_cse_keys
 
-    result = await validate_google_cse_keys(None, "c5c6e8ce160ff411e")
+    result = await validate_google_cse_keys("c5c6e8ce160ff411e")
     assert result.status == "valid"
     assert "Browser widget & 1-Click X-Ray ready" in result.message
 

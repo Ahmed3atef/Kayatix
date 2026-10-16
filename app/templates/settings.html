@@ -412,7 +412,6 @@
             ollamaKey: document.getElementById('ollamaKey')?.value ?? '',
             ollamaBaseUrl: document.getElementById('ollamaBaseUrl')?.value ?? '',
             googleCseCx: document.getElementById('googleCseCx')?.value ?? '',
-            googleCseKey: document.getElementById('googleCseKey')?.value ?? '',
             evaluationMode: document.getElementById('evaluationMode')?.value ?? '',
             subscriptionTier: document.getElementById('subscriptionTier')?.value ?? '',
             rateLimitRpm: document.getElementById('rateLimitRpm')?.value ?? ''
@@ -442,7 +441,7 @@
     // Attach listeners to all inputs in settingsForm
     const monitoredFields = [
         'geminiKey', 'groqKey', 'ollamaKey', 'ollamaBaseUrl', 'googleCseCx', 
-        'googleCseKey', 'evaluationMode', 'subscriptionTier', 'rateLimitRpm'
+        'evaluationMode', 'subscriptionTier', 'rateLimitRpm'
     ];
 
     monitoredFields.forEach(id => {

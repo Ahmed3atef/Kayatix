@@ -326,7 +326,6 @@ def generate_config_text(record: UserSettings) -> str:
         f'OLLAMA_API_KEY="{getattr(record, "ollama_api_key", None) or ""}"\n'
         f'OLLAMA_BASE_URL="{getattr(record, "ollama_base_url", None) or settings.OLLAMA_BASE_URL}"\n\n'
         f'# Legal LinkedIn X-Ray Search Keys\n'
-        f'GOOGLE_CSE_API_KEY="{record.google_cse_api_key or ""}"\n'
         f'GOOGLE_CSE_CX_ID="{record.google_cse_cx_id or ""}"\n\n'
         f'# Engine & Subscription Modes\n'
         f'EVALUATION_MODE="{record.evaluation_mode or DEFAULT_EVALUATION_MODE}"\n'
@@ -514,7 +513,6 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
             groq_api_key=settings.GROQ_API_KEY,
             ollama_api_key=settings.OLLAMA_API_KEY,
             ollama_base_url=settings.OLLAMA_BASE_URL,
-            google_cse_api_key=settings.GOOGLE_CSE_API_KEY,
             google_cse_cx_id=settings.GOOGLE_CSE_CX_ID,
             subscription_tier=DEFAULT_SUBSCRIPTION_TIER,
             evaluation_mode=DEFAULT_EVALUATION_MODE,
@@ -541,9 +539,6 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         if not getattr(user_settings, "ollama_base_url", None) and settings.OLLAMA_BASE_URL:
             user_settings.ollama_base_url = settings.OLLAMA_BASE_URL
             dirty = True
-        if not user_settings.google_cse_api_key and settings.GOOGLE_CSE_API_KEY:
-            user_settings.google_cse_api_key = settings.GOOGLE_CSE_API_KEY
-            dirty = True
         if not user_settings.google_cse_cx_id and settings.GOOGLE_CSE_CX_ID:
             user_settings.google_cse_cx_id = settings.GOOGLE_CSE_CX_ID
             dirty = True
@@ -568,8 +563,6 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         settings.OLLAMA_API_KEY = user_settings.ollama_api_key
     if getattr(user_settings, "ollama_base_url", None):
         settings.OLLAMA_BASE_URL = user_settings.ollama_base_url
-    if user_settings.google_cse_api_key:
-        settings.GOOGLE_CSE_API_KEY = user_settings.google_cse_api_key
     if user_settings.google_cse_cx_id:
         settings.GOOGLE_CSE_CX_ID = user_settings.google_cse_cx_id
     if user_settings.subscription_tier:
@@ -619,7 +612,6 @@ async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
         groq_api_key_configured=bool(record.groq_api_key and record.groq_api_key.strip()),
         ollama_api_key_configured=bool(getattr(record, "ollama_api_key", None) and record.ollama_api_key.strip()),
         ollama_base_url=getattr(record, "ollama_base_url", None) or settings.OLLAMA_BASE_URL,
-        google_cse_api_key_configured=bool(record.google_cse_api_key and record.google_cse_api_key.strip()),
         google_cse_cx_id_configured=bool(record.google_cse_cx_id and record.google_cse_cx_id.strip()),
         subscription_tier=record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER,
         evaluation_mode=record.evaluation_mode or DEFAULT_EVALUATION_MODE,
@@ -654,9 +646,6 @@ async def update_user_settings(
         if "OLLAMA_BASE_URL" in parsed:
             record.ollama_base_url = parsed["OLLAMA_BASE_URL"].strip() or settings.OLLAMA_BASE_URL
             settings.OLLAMA_BASE_URL = record.ollama_base_url
-        if "GOOGLE_CSE_API_KEY" in parsed:
-            record.google_cse_api_key = parsed["GOOGLE_CSE_API_KEY"].strip() or None
-            settings.GOOGLE_CSE_API_KEY = record.google_cse_api_key
         if "GOOGLE_CSE_CX_ID" in parsed:
             record.google_cse_cx_id = clean_google_cx_id(parsed["GOOGLE_CSE_CX_ID"])
             settings.GOOGLE_CSE_CX_ID = record.google_cse_cx_id
@@ -687,9 +676,6 @@ async def update_user_settings(
     if req.ollama_base_url is not None:
         record.ollama_base_url = req.ollama_base_url.strip() or settings.OLLAMA_BASE_URL
         settings.OLLAMA_BASE_URL = record.ollama_base_url
-    if req.google_cse_api_key is not None:
-        record.google_cse_api_key = req.google_cse_api_key.strip() or None
-        settings.GOOGLE_CSE_API_KEY = record.google_cse_api_key
     if req.google_cse_cx_id is not None:
         record.google_cse_cx_id = clean_google_cx_id(req.google_cse_cx_id)
         settings.GOOGLE_CSE_CX_ID = record.google_cse_cx_id
@@ -801,7 +787,7 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
         status = ProviderValidationStatus(
             status="unconfigured",
             message="No Gemini API Key provided.",
-            model_tested="gemini-3.8-flash",
+            model_tested="gemini-flash-lite-latest",
         )
         provider_health_cache["gemini"] = "unconfigured"
         return status
@@ -809,16 +795,10 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
     client = genai.Client(api_key=clean_key)
     
     preferred_models = [
-        "gemini-3.8-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
         "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
         "gemini-flash-latest",
-        "gemini-3.7-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-1.5-flash",
     ]
     models_to_try = list(preferred_models)
     try:
@@ -882,14 +862,14 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
         return ProviderValidationStatus(
             status="valid",
             message="Gemini key authenticated successfully. (Note: Google servers currently report high demand spikes; Groq cascade is ready as active fallback).",
-            model_tested=deduped_models[0] if deduped_models else "gemini-3.8-flash",
+            model_tested=deduped_models[0] if deduped_models else "gemini-flash-lite-latest",
         )
 
     provider_health_cache["gemini"] = "invalid"
     return ProviderValidationStatus(
         status="invalid",
         message=f"Gemini connection failed: {last_err or 'No accessible Gemini models found for this key.'}",
-        model_tested="gemini-3.8-flash",
+        model_tested="gemini-flash-lite-latest",
     )
 
 
@@ -905,12 +885,12 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
     client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=clean_key)
 
     models_to_try = [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
         "qwen/qwen3.8-27b",
         "allam-2-7b",
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
     ]
     try:
         model_list = await client.models.list()
@@ -1020,9 +1000,10 @@ async def validate_ollama_key(
 
 
 async def validate_google_cse_keys(
-    api_key: Optional[str], cx_id: Optional[str]
+    cx_id: Optional[str] = None, *args, **kwargs
 ) -> ProviderValidationStatus:
-    clean_cx = clean_google_cx_id(cx_id)
+    target_cx = args[0] if (args and not cx_id) else cx_id
+    clean_cx = clean_google_cx_id(target_cx)
     if not clean_cx:
         return ProviderValidationStatus(
             status="unconfigured",
@@ -1047,13 +1028,12 @@ async def validate_all_settings(
     groq_key = req.groq_api_key if (req and req.groq_api_key is not None) else record.groq_api_key
     ollama_key = req.ollama_api_key if (req and req.ollama_api_key is not None) else getattr(record, "ollama_api_key", None)
     ollama_base = req.ollama_base_url if (req and req.ollama_base_url is not None) else getattr(record, "ollama_base_url", None)
-    cse_key = req.google_cse_api_key if (req and req.google_cse_api_key is not None) else record.google_cse_api_key
     cse_cx = req.google_cse_cx_id if (req and req.google_cse_cx_id is not None) else record.google_cse_cx_id
 
     gemini_status = await validate_gemini_key(gemini_key)
     groq_status = await validate_groq_key(groq_key)
     ollama_status = await validate_ollama_key(ollama_key, ollama_base)
-    cse_status = await validate_google_cse_keys(cse_key, cse_cx)
+    cse_status = await validate_google_cse_keys(cse_cx)
 
     provider_health_cache["gemini"] = gemini_status.status
     provider_health_cache["groq"] = groq_status.status

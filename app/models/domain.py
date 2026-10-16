@@ -55,7 +55,6 @@ class UserSettings(Base):
     groq_api_key = Column(String(255), nullable=True)
     ollama_api_key = Column(String(255), nullable=True)
     ollama_base_url = Column(String(255), default="https://ollama.com/v1", nullable=True)
-    google_cse_api_key = Column(String(255), nullable=True)
     google_cse_cx_id = Column(String(255), nullable=True)
     subscription_tier = Column(String(50), default="standard")  # "standard", "pro", "enterprise"
     evaluation_mode = Column(String(50), default="llm_cascade")
