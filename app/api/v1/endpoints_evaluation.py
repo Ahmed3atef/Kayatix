@@ -1,3 +1,6 @@
+import logging
+from typing import Optional, Tuple
+from urllib.parse import urlparse
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,8 +10,9 @@ from app.models.domain import EvaluationCache
 from app.schemas.payloads import EvaluationAPIResponse, CandidateEvaluationResult
 from app.services.pdf_service import extract_clean_pdf_text
 from app.services.scraper_service import scrape_candidate_portfolio
-from typing import Tuple
 from app.services.ai_engine import compute_request_hash, evaluate_candidate
+
+logger = logging.getLogger("kayatix.evaluation")
 
 router = APIRouter(prefix="/api/v1/evaluation", tags=["Candidate Evaluation"])
 
@@ -16,7 +20,7 @@ router = APIRouter(prefix="/api/v1/evaluation", tags=["Candidate Evaluation"])
 async def evaluate_candidate_with_fallback(
     candidate_text: str, job_description: str
 ) -> Tuple[CandidateEvaluationResult, str]:
-    """Evaluation wrapper that routes through the active EVALUATION_MODE (hybrid/local/cascade)."""
+    """Evaluation wrapper that routes 100% through the multi-provider Cloud LLM cascade."""
     return await evaluate_candidate(candidate_text, job_description)
 
 
@@ -34,25 +38,48 @@ async def _process_and_cache_evaluation(
     cached_record = result.scalar_one_or_none()
 
     if cached_record:
-        return EvaluationAPIResponse(
-            cached=True,
-            provider_used=cached_record.provider_used,
-            analysis=CandidateEvaluationResult.model_validate(cached_record.evaluation_json),
-        )
+        # Check if cache entry was created by old local/hybrid engine
+        if any(term in (cached_record.provider_used or "").lower() for term in ["local", "hybrid"]):
+            logger.info(
+                f"[AI Evaluator] Cache entry {req_hash[:8]} has legacy provider '{cached_record.provider_used}'. "
+                "Invalidating to perform genuine real AI model evaluation."
+            )
+        else:
+            logger.info(f"[AI Evaluator] Cache hit for request {req_hash[:8]} (Provider: {cached_record.provider_used}).")
+            return EvaluationAPIResponse(
+                cached=True,
+                provider_used=cached_record.provider_used,
+                analysis=CandidateEvaluationResult.model_validate(cached_record.evaluation_json),
+            )
 
-    # Run Candidate Evaluation (Hybrid / Local / LLM Cascade according to Settings)
-    evaluation, provider = await evaluate_candidate_with_fallback(candidate_text, job_description)
-
-    # Persist to Cache
-    new_record = EvaluationCache(
-        request_hash=req_hash,
-        candidate_name=evaluation.candidate_name,
-        source_type=source_type,
-        match_score=evaluation.match_percentage,
-        provider_used=provider,
-        evaluation_json=evaluation.model_dump(),
+    # Run Candidate Evaluation (Real Cloud LLM Cascade: Gemini -> Groq -> OpenRouter)
+    logger.info(
+        f"[AI Evaluator] Initiating live AI candidate evaluation (Source: {source_type}, "
+        f"Candidate text: {len(candidate_text)} chars, JD text: {len(job_description)} chars)..."
     )
-    db.add(new_record)
+    evaluation, provider = await evaluate_candidate_with_fallback(candidate_text, job_description)
+    logger.info(
+        f"[AI Evaluator] Evaluation completed successfully by AI provider '{provider}' "
+        f"for '{evaluation.candidate_name}' (Score: {evaluation.match_percentage}%, YOE: {evaluation.estimated_years_experience})."
+    )
+
+    # Persist or update Cache
+    if cached_record:
+        cached_record.candidate_name = evaluation.candidate_name
+        cached_record.source_type = source_type
+        cached_record.match_score = evaluation.match_percentage
+        cached_record.provider_used = provider
+        cached_record.evaluation_json = evaluation.model_dump()
+    else:
+        new_record = EvaluationCache(
+            request_hash=req_hash,
+            candidate_name=evaluation.candidate_name,
+            source_type=source_type,
+            match_score=evaluation.match_percentage,
+            provider_used=provider,
+            evaluation_json=evaluation.model_dump(),
+        )
+        db.add(new_record)
     await db.commit()
 
     return EvaluationAPIResponse(
@@ -75,8 +102,10 @@ async def evaluate_pdf_resume(
         )
 
     try:
+        logger.info(f"[PDF Evaluation] Received file upload: '{resume_file.filename}'")
         pdf_bytes = await resume_file.read()
         clean_text = extract_clean_pdf_text(pdf_bytes)
+        logger.info(f"[PDF Evaluation] Clean text successfully parsed ({len(clean_text)} chars). Dispatching to AI engine.")
         return await _process_and_cache_evaluation(clean_text, job_description, "pdf_resume", db)
     except ValueError as ve:
         raise HTTPException(
@@ -89,8 +118,6 @@ async def evaluate_pdf_resume(
             detail=str(e),
         )
 
-
-from urllib.parse import urlparse
 
 def normalize_and_validate_url(raw_url: str) -> str:
     url = (raw_url or "").strip()
@@ -107,8 +134,6 @@ def normalize_and_validate_url(raw_url: str) -> str:
     return url
 
 
-from typing import Optional
-
 @router.post("/portfolio-website", response_model=EvaluationAPIResponse)
 async def evaluate_candidate_website(
     job_description: str = Form(..., description="Target Job Description text"),
@@ -120,15 +145,19 @@ async def evaluate_candidate_website(
         # 1. If direct portfolio text was supplied, use it
         if portfolio_text and len(portfolio_text.strip()) >= 15:
             website_text = portfolio_text.strip()
+            logger.info(f"[Website Evaluation] Using candidate text provided directly ({len(website_text)} chars).")
         # 2. Otherwise scrape the supplied URL
         elif portfolio_url and portfolio_url.strip():
             clean_url = normalize_and_validate_url(portfolio_url)
+            logger.info(f"[Website Evaluation] Fetching and parsing candidate website: {clean_url}")
             try:
                 website_text = await scrape_candidate_portfolio(clean_url)
+                logger.info(f"[Website Evaluation] Scraping succeeded ({len(website_text)} chars).")
             except ValueError as ve:
                 err_msg = str(ve)
                 # If scraping returns minimal text (SPA) or is blocked, synthesize a fallback profile
                 if "sufficient readable text" in err_msg or "403" in err_msg:
+                    logger.warning(f"[Website Evaluation] Site scraping blocked/minimal ({err_msg}). Generating structured SPA candidate profile.")
                     parsed_u = urlparse(clean_url)
                     host = parsed_u.netloc or clean_url
                     path_slug = parsed_u.path.strip("/").replace("-", " ").title()

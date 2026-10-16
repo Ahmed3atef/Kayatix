@@ -1,9 +1,12 @@
 import json
+import logging
 import re
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 import httpx
 import trafilatura
+
+logger = logging.getLogger("kayatix.scraper")
 
 
 def extract_strings_from_json(obj) -> list[str]:
@@ -459,16 +462,20 @@ async def scrape_candidate_portfolio(url: str, max_chars: int = 15000) -> str:
         "Accept-Language": "en-US,en;q=0.9",
     }
 
+    logger.info(f"[Portfolio Scraper] Starting portfolio extraction for URL: {url}")
     try:
         async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
             # 1. Specialized extraction for GitHub profiles
             if "github.com" in url.lower():
+                logger.info(f"[Portfolio Scraper] Detected GitHub profile URL: {url}")
                 gh_text = await try_extract_github_profile(url, client)
                 if gh_text and len(gh_text) >= 40:
+                    logger.info(f"[Portfolio Scraper] Successfully extracted GitHub profile ({len(gh_text)} chars).")
                     return gh_text[:max_chars]
 
             # 2. Standard web fetch
             response = await client.get(url, headers=headers)
+            logger.info(f"[Portfolio Scraper] HTTP response {response.status_code} ({len(response.text)} bytes).")
             if response.status_code == 403:
                 if "linkedin.com" in url.lower():
                     raise ValueError(
@@ -523,11 +530,14 @@ async def scrape_candidate_portfolio(url: str, max_chars: int = 15000) -> str:
                 re.search(r'id=["\x27](?:root|__next|app|__nuxt)["\x27]|<(?:router-outlet|app-root)\b', html_content, re.IGNORECASE)
             )
             if current_len < 150 or (is_spa_shell and current_len < 400):
+                logger.info("[Portfolio Scraper] Page appears to be a client-side SPA. Inspecting JS bundles...")
                 spa_strings = await try_extract_from_spa_bundles(url, html_content, client)
 
     except httpx.TimeoutException:
+        logger.warning(f"[Portfolio Scraper] Request to {url} timed out.")
         raise ValueError("Website connection timed out after 12 seconds.")
     except httpx.RequestError as exc:
+        logger.warning(f"[Portfolio Scraper] Network error connecting to {url}: {exc}")
         raise ValueError(f"Could not connect to website: {str(exc)}")
 
     # Combine all extracted sources
@@ -542,8 +552,13 @@ async def scrape_candidate_portfolio(url: str, max_chars: int = 15000) -> str:
         combined.append("\n".join(spa_strings[:50]))
 
     extracted_text = "\n\n".join(combined).strip()
+    logger.info(
+        f"[Portfolio Scraper] Combined extraction completed: {len(extracted_text)} chars "
+        f"(Body: {len(t_text)}, Meta: {len(p_text)}, SPA items: {len(spa_strings)})."
+    )
 
     if not extracted_text or len(extracted_text) < 30:
+        logger.warning(f"[Portfolio Scraper] Insufficient text extracted (< 30 chars).")
         raise ValueError(
             "Could not extract sufficient readable text from the website (< 30 characters). "
             "The site may be a client-side JavaScript Single-Page App (SPA) or requires authentication. "

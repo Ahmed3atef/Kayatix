@@ -30,9 +30,17 @@
                         <h4 class="fw-bold text-body-emphasis mb-1">{{ record.candidate_name or "Unknown Candidate" }}</h4>
                         <div class="d-flex flex-wrap align-items-center gap-2 text-muted small">
                             <span><i class="bi bi-briefcase me-1"></i> {{ analysis.estimated_years_experience or 0 }} Years Experience</span>
-                            <span>&bull;</span>
-                            <span><i class="bi bi-cpu me-1"></i> Provider: <span class="badge bg-secondary font-monospace">{{ record.provider_used }}</span></span>
-                            <span>&bull;</span>
+                            <span><i class="bi bi-cpu me-1"></i> Provider: 
+                                {% if 'google' in record.provider_used.lower() or 'gemini' in record.provider_used.lower() %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-stars me-1"></i>{{ record.provider_used }}</span>
+                                {% elif 'groq' in record.provider_used.lower() %}
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace"><i class="bi bi-lightning-charge-fill me-1"></i>{{ record.provider_used }}</span>
+                                {% elif 'openrouter' in record.provider_used.lower() %}
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cpu-fill me-1"></i>{{ record.provider_used }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary font-monospace">{{ record.provider_used }}</span>
+                                {% endif %}
+                            </span>
                             <span><i class="bi bi-calendar3 me-1"></i> Evaluated: {{ record.created_at.strftime('%Y-%m-%d %H:%M UTC') if record.created_at else 'N/A' }}</span>
                         </div>
                     </div>

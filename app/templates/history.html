@@ -97,7 +97,15 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {% if 'google' in record.provider_used.lower() or 'gemini' in record.provider_used.lower() %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-stars me-1"></i>{{ record.provider_used }}</span>
+                                {% elif 'groq' in record.provider_used.lower() %}
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace"><i class="bi bi-lightning-charge-fill me-1"></i>{{ record.provider_used }}</span>
+                                {% elif 'openrouter' in record.provider_used.lower() %}
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cpu-fill me-1"></i>{{ record.provider_used }}</span>
+                                {% else %}
                                 <span class="badge bg-secondary-subtle text-secondary font-monospace">{{ record.provider_used }}</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <span class="font-monospace small text-muted" title="{{ record.request_hash }}">{{ record.request_hash[:12] }}...</span>

@@ -93,6 +93,7 @@ async def _call_gemini(
     last_err = None
     for model_name in deduped:
         try:
+            logger.info(f"[AI Engine] Querying Google Gemini model '{model_name}'...")
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -105,13 +106,14 @@ async def _call_gemini(
             )
             if not response.text:
                 continue
+            logger.info(f"[AI Engine] Google Gemini model '{model_name}' generated structured response ({len(response.text)} chars).")
             return response.text, model_name
         except Exception as err:
             last_err = err
             err_str = str(err).lower()
             if any(k in err_str for k in ["api_key_invalid", "api key not valid", "permission_denied", "consumer_invalid", "consumer_suspended", "unauthenticated", "401"]):
                 raise err
-            logger.warning("Gemini model %s failed: %s. Trying next available Gemini model.", model_name, err)
+            logger.warning("[AI Engine] Gemini model %s failed: %s. Trying next available Gemini model.", model_name, err)
             continue
     raise last_err or RuntimeError("Gemini call failed across all candidate models")
 
@@ -134,6 +136,7 @@ async def _call_openai_compatible_provider(
         f"CRITICAL: Your output MUST be a valid JSON object adhering strictly to this JSON Schema:\n{schema_json}"
     )
 
+    logger.info(f"[AI Engine] Querying provider ({base_url}) with model '{model_name}'...")
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
     response = await client.chat.completions.create(
         model=model_name,
@@ -147,6 +150,7 @@ async def _call_openai_compatible_provider(
     content = response.choices[0].message.content
     if not content:
         raise RuntimeError(f"Empty response received from {model_name}")
+    logger.info(f"[AI Engine] Model '{model_name}' generated structured response ({len(content)} chars).")
     return content
 
 

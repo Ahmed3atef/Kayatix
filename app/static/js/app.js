@@ -45,6 +45,21 @@ if (themeToggleBtn) {
     }
 }
 
+function formatProviderBadge(provider) {
+    if (!provider) return '<span class="badge bg-secondary-subtle text-secondary font-monospace">Unknown</span>';
+    const p = String(provider).toLowerCase();
+    if (p.includes('google') || p.includes('gemini')) {
+        return `<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-stars me-1"></i>${provider}</span>`;
+    }
+    if (p.includes('groq')) {
+        return `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace"><i class="bi bi-lightning-charge-fill me-1"></i>${provider}</span>`;
+    }
+    if (p.includes('openrouter')) {
+        return `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cpu-fill me-1"></i>${provider}</span>`;
+    }
+    return `<span class="badge bg-secondary-subtle text-secondary border font-monospace">${provider}</span>`;
+}
+
 // Render Evaluation Scorecard Card
 function buildEvaluationCardHTML(apiData) {
     const res = apiData.analysis;
@@ -110,7 +125,7 @@ function buildEvaluationCardHTML(apiData) {
                     <div class="d-flex align-items-center gap-2 small text-muted mt-1">
                         <span><i class="bi bi-briefcase me-1"></i> ${res.estimated_years_experience} YOE</span>
                         <span>&bull;</span>
-                        <span>Provider: <span class="badge bg-secondary-subtle text-secondary font-monospace">${provider}</span></span>
+                        <span>Provider: ${formatProviderBadge(provider)}</span>
                         <span>&bull;</span>
                         <span>${isCached ? '<span class="badge bg-success-subtle text-success"><i class="bi bi-check2"></i> Cache Hit</span>' : '<span class="badge bg-primary-subtle text-primary">Live Evaluated</span>'}</span>
                     </div>

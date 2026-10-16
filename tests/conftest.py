@@ -23,6 +23,18 @@ test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 
+@pytest.fixture(scope="function", autouse=True)
+def isolate_test_database():
+    import app.core.database as app_db
+    original_session_local = app_db.AsyncSessionLocal
+    original_db_url = settings.DATABASE_URL
+    app_db.AsyncSessionLocal = TestSessionLocal
+    settings.DATABASE_URL = TEST_DATABASE_URL
+    yield
+    app_db.AsyncSessionLocal = original_session_local
+    settings.DATABASE_URL = original_db_url
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with test_engine.begin() as conn:

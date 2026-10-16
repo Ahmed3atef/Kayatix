@@ -193,3 +193,26 @@ async def evaluation_detail_view(
             "record": record,
         },
     )
+
+
+from app.services.docs_service import get_documentation_page
+
+@router.get("/documentation", response_class=HTMLResponse)
+@router.get("/documentation/{doc_slug}", response_class=HTMLResponse)
+async def documentation_view(
+    request: Request,
+    doc_slug: Optional[str] = None,
+):
+    """Interactive Knowledge Base & Documentation: Dynamically loads and renders local Markdown pages."""
+    doc_data = get_documentation_page(doc_slug)
+    if not doc_data:
+        raise HTTPException(status_code=404, detail="Documentation page not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="documentation.html",
+        context={
+            "doc": doc_data,
+        },
+    )
+

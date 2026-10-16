@@ -178,3 +178,31 @@ async def test_settings_page_renders_database_engine_section(client):
     assert "id=\"dbChoiceSqlite\"" in html
     assert "id=\"dbChoicePostgres\"" in html
 
+
+@pytest.mark.asyncio
+async def test_database_switch_safely(db_session, tmp_path):
+    """Verifies that switching database engine at runtime executes safely with zero errors."""
+    import os
+    from app.core.database import switch_database_engine
+    
+    new_db_file = tmp_path / "test_switch.db"
+    new_db_url = f"sqlite+aiosqlite:///{new_db_file}"
+    
+    update_req = UserSettingsUpdateRequest(
+        database_url=new_db_url,
+        gemini_api_key="switch_test_gemini",
+    )
+    
+    # Execute switch
+    res = await update_user_settings(update_req, db_session)
+    
+    assert res.database_url == new_db_url
+    assert res.database_type == "sqlite"
+    assert res.gemini_api_key_configured is True
+    assert os.path.exists(new_db_file)
+    
+    # Restore test database engine
+    from tests.conftest import TEST_DATABASE_URL
+    await switch_database_engine(TEST_DATABASE_URL)
+
+

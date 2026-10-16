@@ -95,3 +95,26 @@ async def test_evaluation_detail_view(client, db_session, sample_candidate_evalu
     not_found = await client.get("/evaluations/99999")
     assert not_found.status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_documentation_view(client):
+    """Verifies that /documentation renders the documentation layout with sidebar and sections."""
+    response = await client.get("/documentation")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Kayatix Documentation" in response.text
+    assert "Documentation" in response.text
+    assert "Local Readme Editing" in response.text
+
+
+@pytest.mark.asyncio
+async def test_documentation_page_by_slug(client):
+    """Verifies that individual documentation sections can be browsed by slug."""
+    # Test specific page: 05-linkedin-xray-sourcing
+    response = await client.get("/documentation/05-linkedin-xray-sourcing")
+    assert response.status_code == 200
+    assert "API_KEY_SERVICE_BLOCKED" in response.text
+    assert "Google Custom Search" in response.text
+    assert "05-linkedin-xray-sourcing.md" in response.text
+
+

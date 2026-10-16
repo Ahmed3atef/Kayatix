@@ -10,9 +10,9 @@ from openai import AsyncOpenAI
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.core.config import settings
+from app.core import database as db_core
 from app.core.database import (
     DEFAULT_SQLITE_URL,
-    AsyncSessionLocal,
     normalize_database_url,
     switch_database_engine,
 )
@@ -91,14 +91,38 @@ def parse_config_text(text: str) -> dict:
     return parsed
 
 
+def _persist_database_url_to_env(new_url: str):
+    """Safely updates or inserts DATABASE_URL in .env file on disk."""
+    try:
+        env_path = ".env"
+        env_lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                env_lines = f.readlines()
+        db_url_found = False
+        new_lines = []
+        for line in env_lines:
+            if line.startswith("DATABASE_URL="):
+                new_lines.append(f'DATABASE_URL="{new_url}"\n')
+                db_url_found = True
+            else:
+                new_lines.append(line)
+        if not db_url_found:
+            new_lines.append(f'DATABASE_URL="{new_url}"\n')
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        logger.warning(f"Could not persist DATABASE_URL to .env file: {e}")
+
+
 async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
-    """Retrieves user settings row from DB or initializes it with complete out-of-the-box defaults."""
+    """Retrieves user settings row from active DB or initializes it with complete out-of-the-box defaults on first run."""
     stmt = select(UserSettings).limit(1)
     result = await db.execute(stmt)
     user_settings = result.scalar_one_or_none()
 
     if not user_settings:
-        # Pre-populate with working defaults in SQLite
+        logger.info("[Database] Initializing fresh UserSettings table record with system defaults.")
         user_settings = UserSettings(
             project_name=DEFAULT_PROJECT_NAME,
             version=DEFAULT_VERSION,
@@ -240,79 +264,69 @@ async def update_user_settings(
         normalized_target = normalize_database_url(target_db_url)
         current_normalized = normalize_database_url(record.database_url or settings.DATABASE_URL)
         if normalized_target != current_normalized:
+            logger.info(f"[Database Switcher] Switching database backend from '{current_normalized}' to '{normalized_target}'...")
             # Validate target connection first
             val = await validate_database_connection(normalized_target)
             if val.status != "valid":
+                logger.error(f"[Database Switcher] Validation failed for {normalized_target}: {val.message}")
                 raise HTTPException(status_code=400, detail=f"Cannot switch database: {val.message}")
 
-            # Grab existing templates from current db session to migrate
-            existing_templates = await get_all_job_templates(db)
             saved_settings = {
-                "project_name": record.project_name,
-                "version": record.version,
-                "gemini_api_key": req.gemini_api_key.strip() if req.gemini_api_key is not None else record.gemini_api_key,
-                "groq_api_key": req.groq_api_key.strip() if req.groq_api_key is not None else record.groq_api_key,
-                "openrouter_api_key": req.openrouter_api_key.strip() if req.openrouter_api_key is not None else record.openrouter_api_key,
-                "google_cse_api_key": req.google_cse_api_key.strip() if req.google_cse_api_key is not None else record.google_cse_api_key,
-                "google_cse_cx_id": clean_google_cx_id(req.google_cse_cx_id) if req.google_cse_cx_id is not None else record.google_cse_cx_id,
-                "subscription_tier": req.subscription_tier or record.subscription_tier,
-                "evaluation_mode": req.evaluation_mode or record.evaluation_mode,
-                "rate_limit_rpm": req.rate_limit_rpm or record.rate_limit_rpm,
+                "project_name": record.project_name or DEFAULT_PROJECT_NAME,
+                "version": record.version or DEFAULT_VERSION,
+                "gemini_api_key": record.gemini_api_key,
+                "groq_api_key": record.groq_api_key,
+                "openrouter_api_key": record.openrouter_api_key,
+                "google_cse_api_key": record.google_cse_api_key,
+                "google_cse_cx_id": record.google_cse_cx_id,
+                "subscription_tier": record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER,
+                "evaluation_mode": record.evaluation_mode or DEFAULT_EVALUATION_MODE,
+                "rate_limit_rpm": record.rate_limit_rpm or DEFAULT_RATE_LIMIT_RPM,
                 "database_url": normalized_target,
             }
 
-            # Switch live engine
+            # Switch live engine safely
             await switch_database_engine(normalized_target)
 
-            # Populate target database
-            async with AsyncSessionLocal() as new_db:
-                new_rec_res = await new_db.execute(select(UserSettings).limit(1))
+            # Populate target database safely with new session
+            async with db_core.AsyncSessionLocal() as new_session:
+                new_rec_res = await new_session.execute(select(UserSettings).limit(1))
                 new_rec = new_rec_res.scalar_one_or_none()
                 if not new_rec:
                     new_rec = UserSettings(**saved_settings)
                     new_rec.env_content = generate_config_text(new_rec)
-                    new_db.add(new_rec)
+                    new_session.add(new_rec)
                 else:
                     for k, v in saved_settings.items():
                         setattr(new_rec, k, v)
                     new_rec.env_content = generate_config_text(new_rec)
 
-                # Migrate templates if target database has none
-                tpl_res = await new_db.execute(select(JobTemplate).limit(1))
-                if not tpl_res.scalar_one_or_none() and existing_templates:
-                    for t in existing_templates:
-                        new_db.add(JobTemplate(title=t.title, category=t.category, description=t.description))
+                # Initialize default templates if target database has none
+                tpl_res = await new_session.execute(select(JobTemplate).limit(1))
+                if not tpl_res.scalar_one_or_none():
+                    for t in DEFAULT_JOB_TEMPLATES:
+                        new_session.add(JobTemplate(title=t["title"], category=t["category"], description=t["description"]))
 
-                await new_db.commit()
-                await new_db.refresh(new_rec)
-                record = new_rec
-                db = new_db
+                await new_session.commit()
+                await new_session.refresh(new_rec)
 
-            # Persist DATABASE_URL to .env on disk for subsequent process restarts
-            try:
-                env_path = ".env"
-                env_lines = []
-                if os.path.exists(env_path):
-                    with open(env_path, "r", encoding="utf-8") as f:
-                        env_lines = f.readlines()
-                db_url_found = False
-                new_lines = []
-                for line in env_lines:
-                    if line.startswith("DATABASE_URL="):
-                        new_lines.append(f'DATABASE_URL="{normalized_target}"\n')
-                        db_url_found = True
-                    else:
-                        new_lines.append(line)
-                if not db_url_found:
-                    new_lines.append(f'DATABASE_URL="{normalized_target}"\n')
-                with open(env_path, "w", encoding="utf-8") as f:
-                    f.writelines(new_lines)
-            except Exception as e:
-                logger.warning(f"Could not persist DATABASE_URL to .env file: {e}")
+                # Sync in-memory settings
+                if new_rec.gemini_api_key: settings.GEMINI_API_KEY = new_rec.gemini_api_key
+                if new_rec.groq_api_key: settings.GROQ_API_KEY = new_rec.groq_api_key
+                if new_rec.openrouter_api_key: settings.OPENROUTER_API_KEY = new_rec.openrouter_api_key
+                if new_rec.google_cse_api_key: settings.GOOGLE_CSE_API_KEY = new_rec.google_cse_api_key
+                if new_rec.google_cse_cx_id: settings.GOOGLE_CSE_CX_ID = new_rec.google_cse_cx_id
+                if new_rec.evaluation_mode: settings.EVALUATION_MODE = new_rec.evaluation_mode
+                settings.DATABASE_URL = normalized_target
 
-    # Regenerate fresh config representation to stay consistent
+                _persist_database_url_to_env(normalized_target)
+                logger.info(f"[Database Switcher] Successfully switched and initialized database backend: {normalized_target}")
+
+                # Return directly from new session without touching the disposed old session
+                return await get_settings_summary(new_session)
+
+    # Standard update on current database session (no DB switch)
     record.env_content = generate_config_text(record)
-
     await db.commit()
     await db.refresh(record)
 

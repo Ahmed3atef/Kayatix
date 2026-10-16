@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
-from fastapi import FastAPI
+import sys
+import time
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
@@ -11,6 +14,16 @@ from app.api.v1.endpoints_evaluation import router as evaluation_router
 from app.api.v1.endpoints_sourcing import router as sourcing_router
 from app.api.v1.endpoints_settings import router as settings_router
 from app.api.views import router as views_router
+
+# Setup clean, visible console logging across the entire platform
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-7s | [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+logger = logging.getLogger("kayatix.server")
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -89,6 +102,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def console_request_logger_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    path = request.url.path
+    if not path.startswith("/static"):
+        logger.info(f"==> [{request.method}] {path}")
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    if not path.startswith("/static"):
+        logger.info(f"<== [{request.method}] {path} -> {response.status_code} ({duration_ms:.1f}ms)")
+    return response
 
 # Mount static directory for Bootstrap assets, custom CSS & JS
 static_path = BASE_DIR / "static"

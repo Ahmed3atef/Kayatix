@@ -50,3 +50,7 @@ htmlcov/
 # IDE settings
 .vscode/
 .idea/
+
+
+# fastapicloud
+.fastapicloud/

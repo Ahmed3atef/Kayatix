@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{{ doc.title }} | Kayatix Documentation{% endblock %}
+
+{% block head %}
+<!-- Marked.js for fast, clean GFM Markdown parsing -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Highlight.js for code syntax highlighting -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+<style>
+    .docs-sidebar {
+        position: sticky;
+        top: 5rem;
+        max-height: calc(100vh - 6rem);
+        overflow-y: auto;
+    }
+    .docs-content {
+        line-height: 1.75;
+        font-size: 1rem;
+    }
+    .docs-content h1, .docs-content h2, .docs-content h3 {
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        scroll-margin-top: 6rem;
+    }
+    .docs-content h1 { font-size: 2rem; margin-top: 0.5rem; }
+    .docs-content h2 { font-size: 1.5rem; border-bottom: 1px solid var(--bs-border-color); padding-bottom: 0.4rem; }
+    .docs-content h3 { font-size: 1.25rem; }
+    .docs-content pre {
+        background-color: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        overflow-x: auto;
+    }
+    .docs-content code {
+        font-size: 0.9em;
+    }
+    .docs-content table {
+        width: 100%;
+        margin-bottom: 1.5rem;
+        border-collapse: collapse;
+    }
+    .docs-content th, .docs-content td {
+        border: 1px solid var(--bs-border-color);
+        padding: 0.6rem 0.9rem;
+    }
+    .docs-content th {
+        background-color: var(--bs-tertiary-bg);
+        font-weight: 600;
+    }
+    .docs-content blockquote {
+        border-left: 4px solid var(--bs-primary);
+        padding-left: 1rem;
+        color: var(--bs-secondary-color);
+        margin: 1.5rem 0;
+        background-color: var(--bs-tertiary-bg);
+        padding: 0.75rem 1rem;
+        border-radius: 0.25rem;
+    }
+    .docs-nav-link.active {
+        background-color: var(--bs-primary-subtle) !important;
+        color: var(--bs-primary) !important;
+        font-weight: 600;
+        border-left: 3px solid var(--bs-primary);
+    }
+    .docs-nav-link {
+        border-left: 3px solid transparent;
+        transition: all 0.15s ease-in-out;
+    }
+    .docs-nav-link:hover {
+        background-color: var(--bs-tertiary-bg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Left Sidebar: Document Index Navigation -->
+    <div class="col-lg-3 col-md-4">
+        <div class="docs-sidebar">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-header bg-body-tertiary border-bottom p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold text-body-emphasis d-flex align-items-center gap-2">
+                            <i class="bi bi-book-half text-primary"></i> Documentation
+                        </span>
+                        <span class="badge bg-secondary-subtle text-secondary small">{{ doc.total_pages }} Pages</span>
+                    </div>
+                    <!-- Search Filter Input -->
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control" id="docSearchInput" placeholder="Filter sections...">
+                    </div>
+                </div>
+                <div class="list-group list-group-flush" id="docSectionsList">
+                    {% for p in doc.all_pages %}
+                    <a href="/documentation/{{ p.slug }}" 
+                       class="list-group-item list-group-item-action d-flex align-items-center justify-content-between px-3 py-2 docs-nav-link {% if p.slug == doc.slug %}active{% endif %}"
+                       data-title="{{ p.title|lower }}">
+                        <div class="d-flex align-items-center gap-2 text-truncate">
+                            <span class="badge bg-body-secondary text-body-tertiary small rounded-pill">{{ p.index }}</span>
+                            <span class="small text-truncate">{{ p.title }}</span>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Local Editing Callout Card -->
+            <div class="card border-0 bg-primary-subtle text-primary shadow-sm rounded-4 p-3 small">
+                <div class="d-flex align-items-center gap-2 fw-bold mb-1">
+                    <i class="bi bi-pencil-square"></i> Local Readme Editing
+                </div>
+                <p class="mb-2 text-primary-emphasis" style="font-size: 0.85rem;">
+                    You can edit, add, or customize these pages directly on your machine in the <code>docs/</code> folder.
+                </p>
+                <div class="d-flex align-items-center justify-content-between font-monospace bg-body p-2 rounded border small">
+                    <span class="text-truncate">{{ doc.relative_path }}</span>
+                    <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="copyToClipboard('{{ doc.relative_path }}', 'Path copied!')" title="Copy local path">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="col-lg-9 col-md-8">
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+            <!-- Header bar with breadcrumbs and file path -->
+            <div class="card-header bg-body-tertiary border-bottom p-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb mb-1 small text-muted">
+                            <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="/documentation" class="text-decoration-none">Documentation</a></li>
+                            <li class="breadcrumb-item active" aria-current="page">{{ doc.title }}</li>
+                        </ol>
+                    </nav>
+                    <h3 class="fw-bold text-body-emphasis mb-0">{{ doc.title }}</h3>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary-subtle text-secondary font-monospace border">
+                        <i class="bi bi-filetype-md me-1"></i> {{ doc.filename }}
+                    </span>
+                    <a href="/settings" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
+                        <i class="bi bi-gear-fill"></i> Go to Settings
+                    </a>
+                </div>
+            </div>
+
+            <!-- Rendered Markdown Body -->
+            <div class="card-body p-4 p-md-5">
+                <!-- Hidden raw markdown container -->
+                <textarea id="rawMarkdownSource" class="d-none">{{ doc.content }}</textarea>
+                
+                <!-- Output container rendered dynamically by marked.js -->
+                <div id="docsRenderedOutput" class="docs-content text-body-emphasis">
+                    <div class="text-center py-5 text-muted">
+                        <span class="spinner-border spinner-border-sm me-2"></span> Rendering documentation...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer: Previous / Next Chapter Pagination -->
+            <div class="card-footer bg-body-tertiary border-top p-4 d-flex justify-content-between align-items-center">
+                {% if doc.prev_page %}
+                <a href="/documentation/{{ doc.prev_page.slug }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
+                    <i class="bi bi-arrow-left"></i>
+                    <div class="text-start d-none d-sm-inline">
+                        <div class="small text-muted" style="font-size: 0.75rem;">Previous</div>
+                        <div class="fw-semibold">{{ doc.prev_page.title }}</div>
+                    </div>
+                </a>
+                {% else %}
+                <div></div>
+                {% endif %}
+
+                <span class="small text-muted font-monospace">
+                    Chapter {{ doc.current_index }} of {{ doc.total_pages }}
+                </span>
+
+                {% if doc.next_page %}
+                <a href="/documentation/{{ doc.next_page.slug }}" class="btn btn-primary d-inline-flex align-items-center gap-2">
+                    <div class="text-end d-none d-sm-inline">
+                        <div class="small text-white-50" style="font-size: 0.75rem;">Next</div>
+                        <div class="fw-semibold">{{ doc.next_page.title }}</div>
+                    </div>
+                    <i class="bi bi-arrow-right"></i>
+                </a>
+                {% else %}
+                <div></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Configure marked.js with highlight.js syntax highlighting
+    const rawMarkdown = document.getElementById('rawMarkdownSource')?.value || '';
+    const outputContainer = document.getElementById('docsRenderedOutput');
+
+    if (rawMarkdown && outputContainer && typeof marked !== 'undefined') {
+        marked.setOptions({
+            gfm: true,
+            breaks: true,
+            highlight: function(code, lang) {
+                if (typeof hljs !== 'undefined') {
+                    const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                    return hljs.highlight(code, { language }).value;
+                }
+                return code;
+            }
+        });
+
+        // Custom renderer for GitHub-style callout alerts (> [!NOTE], > [!WARNING], etc.)
+        const renderer = new marked.Renderer();
+        const originalBlockquote = renderer.blockquote.bind(renderer);
+        renderer.blockquote = function(quote) {
+            const rawText = quote.text || quote;
+            if (rawText.includes('[!NOTE]')) {
+                const cleaned = rawText.replace(/\[!NOTE\]/g, '').trim();
+                return `<div class="alert alert-info border-info-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-info-circle-fill"></i> Note</h6><div>${cleaned}</div></div>`;
+            }
+            if (rawText.includes('[!WARNING]')) {
+                const cleaned = rawText.replace(/\[!WARNING\]/g, '').trim();
+                return `<div class="alert alert-warning border-warning-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-exclamation-triangle-fill"></i> Warning</h6><div>${cleaned}</div></div>`;
+            }
+            if (rawText.includes('[!TIP]')) {
+                const cleaned = rawText.replace(/\[!TIP\]/g, '').trim();
+                return `<div class="alert alert-success border-success-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-lightbulb-fill"></i> Tip</h6><div>${cleaned}</div></div>`;
+            }
+            if (rawText.includes('[!IMPORTANT]')) {
+                const cleaned = rawText.replace(/\[!IMPORTANT\]/g, '').trim();
+                return `<div class="alert alert-primary border-primary-subtle shadow-sm my-3"><h6 class="fw-bold mb-1 d-flex align-items-center gap-1"><i class="bi bi-star-fill"></i> Important</h6><div>${cleaned}</div></div>`;
+            }
+            return originalBlockquote(quote);
+        };
+
+        marked.use({ renderer });
+        outputContainer.innerHTML = marked.parse(rawMarkdown);
+
+        // Enhance tables with bootstrap table classes
+        outputContainer.querySelectorAll('table').forEach(tbl => {
+            tbl.classList.add('table', 'table-bordered', 'table-hover', 'my-3');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-responsive';
+            tbl.parentNode.insertBefore(wrapper, tbl);
+            wrapper.appendChild(tbl);
+        });
+    }
+
+    // 2. Real-time Sidebar Section Filtering
+    const searchInput = document.getElementById('docSearchInput');
+    const sectionsList = document.getElementById('docSectionsList');
+    if (searchInput && sectionsList) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            sectionsList.querySelectorAll('.docs-nav-link').forEach(link => {
+                const title = link.getAttribute('data-title') || '';
+                if (!query || title.includes(query)) {
+                    link.classList.remove('d-none');
+                } else {
+                    link.classList.add('d-none');
+                }
+            });
+        });
+    }
+});
+</script>
+{% endblock %}
+
