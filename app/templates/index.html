@@ -3,19 +3,35 @@
 {% block title %}Dashboard | A.Y.A.T. (Automated Yield for Applicant & Talent){% endblock %}
 
 {% block content %}
-<!-- Welcome & Quick Action Header -->
-<div class="row align-items-center mb-4">
-    <div class="col-lg-8">
-        <h2 class="fw-bold mb-1"><i class="bi bi-cpu text-primary me-2"></i>Kayatix | A.Y.A.T. Intelligence Dashboard</h2>
-        <p class="text-muted mb-0"><strong>A.Y.A.T. (Automated Yield for Applicant &amp; Talent)</strong>: Enterprise-grade HR talent intelligence and automation platform. Unbiased candidate screening, legal LinkedIn sourcing, and deep portfolio analysis with multi-provider AI failover.</p>
-    </div>
-    <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
-        <div class="d-inline-flex gap-2">
-            <a href="/screener" class="btn btn-primary d-inline-flex align-items-center gap-1 shadow-sm">
-                <i class="bi bi-file-earmark-pdf"></i> Screen Resume
-            </a>
-            <a href="/sourcing" class="btn btn-success d-inline-flex align-items-center gap-1 shadow-sm">
-                <i class="bi bi-search"></i> Source Talent
+<!-- Welcome & Quick Action Hero Showcase -->
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-dark text-white" style="background: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #1e1b4b 100%);">
+    <div class="row g-0 align-items-center">
+        <div class="col-lg-7 p-4 p-xl-5">
+            <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill bg-primary-subtle text-primary border border-primary-subtle mb-3 small fw-semibold">
+                <i class="bi bi-stars"></i> Next-Gen AI Talent Intelligence
+            </div>
+            <h2 class="display-6 fw-bold mb-2 text-white">Kayatix &bull; A.Y.A.T. Engine</h2>
+            <p class="text-light opacity-75 mb-4">
+                <strong>Automated Yield for Applicant &amp; Talent</strong>: Unbiased candidate screening, deep portfolio analysis, and 100% legal LinkedIn sourcing backed by multi-provider AI resilience (Gemini, Groq &amp; OpenRouter).
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="/screener" class="btn btn-primary btn-sm px-3 py-2 d-inline-flex align-items-center gap-2 shadow">
+                    <i class="bi bi-file-earmark-pdf"></i> Screen Resume
+                </a>
+                <a href="/sourcing" class="btn btn-success btn-sm px-3 py-2 d-inline-flex align-items-center gap-2 shadow">
+                    <i class="bi bi-search"></i> Talent Sourcing
+                </a>
+                <a href="/portfolio" class="btn btn-outline-light btn-sm px-3 py-2 d-inline-flex align-items-center gap-2">
+                    <i class="bi bi-globe"></i> Portfolio Analyzer
+                </a>
+                <a href="/documentation" class="btn btn-link text-light text-decoration-none btn-sm d-inline-flex align-items-center gap-1">
+                    <i class="bi bi-book"></i> Read Docs &rarr;
+                </a>
+            </div>
+        </div>
+        <div class="col-lg-5 p-3 text-center d-none d-lg-block">
+            <a href="/documentation" title="View Kayatix Architecture & System Docs">
+                <img src="/static/img/kayatix-banner.png" alt="Kayatix A.Y.A.T. Engine" class="img-fluid rounded-4 shadow-lg border border-secondary border-opacity-25" style="max-height: 220px; object-fit: cover;">
             </a>
         </div>
     </div>

@@ -4,6 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Kayatix | A.Y.A.T. Engine (Automated Yield for Applicant & Talent){% endblock %}</title>
+
+    <!-- Search Engine & Metadata -->
+    <meta name="description" content="{% block meta_description %}Kayatix (A.Y.A.T. Engine) - Enterprise-grade AI Talent Intelligence, Resume Screening, Portfolio Scraping, and 100% Legal Sourcing with Multi-Provider AI Fallback.{% endblock %}">
+    <meta name="keywords" content="Kayatix, AYAT Engine, AI Resume Screener, Talent Intelligence, Candidate Sourcing, LinkedIn X-Ray, HR Tech, FastAPI">
+    <meta name="author" content="Kayatix">
+
+    <!-- Open Graph / LinkedIn / Facebook / WhatsApp -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Kayatix | A.Y.A.T. Engine">
+    <meta property="og:title" content="{% block og_title %}Kayatix | AI Talent Intelligence & Candidate Sourcing Engine{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Automated Yield for Applicant & Talent. Multi-provider AI fallback engine for resume evaluation, candidate sourcing, and portfolio analysis.{% endblock %}">
+    <meta property="og:image" content="{{ request.base_url }}static/img/kayatix-banner.png">
+    <meta property="og:image:secure_url" content="{{ request.base_url }}static/img/kayatix-banner.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1376">
+    <meta property="og:image:height" content="768">
+    <meta property="og:image:alt" content="Kayatix A.Y.A.T. Engine AI Candidate Evaluation & Talent Intelligence Platform">
+    <meta property="og:url" content="{{ request.url }}">
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}Kayatix | AI Talent Intelligence & Candidate Sourcing Engine{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Automated Yield for Applicant & Talent. Multi-provider AI fallback engine for resume evaluation, candidate sourcing, and portfolio analysis.{% endblock %}">
+    <meta name="twitter:image" content="{{ request.base_url }}static/img/kayatix-banner.png">
+    <meta name="twitter:image:alt" content="Kayatix A.Y.A.T. Engine AI Candidate Evaluation & Talent Intelligence Platform">
+
     <!-- Bootstrap 5.3.3 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -70,6 +96,41 @@
                 </ul>
 
                 <div class="d-flex align-items-center gap-2 text-nowrap pt-2 pt-lg-0">
+                    <!-- Social Share Dropdown -->
+                    <div class="dropdown">
+                        <button class="btn btn-outline-light btn-sm dropdown-toggle d-flex align-items-center gap-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Share Kayatix on Social Media">
+                            <i class="bi bi-share-fill"></i> <span class="d-none d-sm-inline">Share</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li><h6 class="dropdown-header text-uppercase fs-8 fw-bold">Share Platform</h6></li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2" href="https://www.linkedin.com/sharing/share-offsite/?url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer">
+                                    <i class="bi bi-linkedin text-primary"></i> <span>LinkedIn</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2" href="https://twitter.com/intent/tweet?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20%26%20Sourcing%20Engine' | urlencode }}&url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer">
+                                    <i class="bi bi-twitter-x"></i> <span>X (Twitter)</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2" href="https://api.whatsapp.com/send?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20%26%20Sourcing%20Engine%20' | urlencode }}{{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer">
+                                    <i class="bi bi-whatsapp text-success"></i> <span>WhatsApp</span>
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item d-flex align-items-center gap-2" type="button" onclick="navigator.clipboard.writeText(window.location.href).then(() => { if (typeof showToast === 'function') { showToast('Page link copied to clipboard!'); } else { alert('Page link copied to clipboard!'); } })">
+                                    <i class="bi bi-link-45deg text-info"></i> <span>Copy Page Link</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <a href="https://github.com/" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1" title="GitHub Repository">
+                        <i class="bi bi-github"></i>
+                    </a>
+
                     <a href="/settings" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1 {% if request.url.path == '/settings' %}active{% endif %}">
                         <i class="bi bi-gear-fill"></i> <span>Settings</span>
                     </a>
@@ -106,8 +167,16 @@
     <!-- Footer -->
     <footer class="border-top py-3 mt-auto">
         <div class="container-fluid px-4 d-flex flex-column flex-md-row justify-content-between align-items-center text-muted small">
-            <div>
-                <strong>Kayatix | A.Y.A.T. Engine</strong> &mdash; <em>Automated Yield for Applicant &amp; Talent</em> &copy; 2026. Built with FastAPI, Pydantic V2 &amp; Multi-Provider AI Fallback.
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <div>
+                    <strong>Kayatix | A.Y.A.T. Engine</strong> &mdash; <em>Automated Yield for Applicant &amp; Talent</em> &copy; 2026. Built with FastAPI, Pydantic V2 &amp; Multi-Provider AI Fallback.
+                </div>
+                <div class="d-inline-flex align-items-center gap-2 border-start ps-3">
+                    <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="Share on LinkedIn"><i class="bi bi-linkedin fs-6"></i></a>
+                    <a href="https://twitter.com/intent/tweet?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20Engine' | urlencode }}&url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="Share on X (Twitter)"><i class="bi bi-twitter-x fs-6"></i></a>
+                    <a href="https://api.whatsapp.com/send?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20Engine%20' | urlencode }}{{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="Share on WhatsApp"><i class="bi bi-whatsapp fs-6"></i></a>
+                    <a href="https://github.com/" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="GitHub Repository"><i class="bi bi-github fs-6"></i></a>
+                </div>
             </div>
             <div class="d-flex align-items-center gap-2 mt-2 mt-md-0" id="aiProviderFooterBadges">
                 {% set gemini_configured = app_settings.GEMINI_API_KEY and app_settings.GEMINI_API_KEY.strip() %}

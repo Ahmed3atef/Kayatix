@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="app/static/img/kayatix-banner.png" alt="Kayatix - A.Y.A.T. Engine AI Talent Intelligence" width="100%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+</p>
+
 # Kayatix | A.Y.A.T. Engine
 
 ### Automated Yield for Applicant & Talent
@@ -9,6 +13,9 @@
 [![UI](https://img.shields.io/badge/UI-Jinja2%20%2B%20Bootstrap%205.3-7952b3.svg)](https://getbootstrap.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Resilience](https://img.shields.io/badge/High%20Availability-Multi--Provider%20Failover-success.svg)]()
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Share-0A66C2.svg?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fgithub.com%2F)
+[![X](https://img.shields.io/badge/X-Share-000000.svg?logo=x&logoColor=white)](https://twitter.com/intent/tweet?text=Discover%20Kayatix%20-%20Enterprise%20AI%20Talent%20Intelligence%20%26%20Candidate%20Sourcing%20Platform)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-Share-25D366.svg?logo=whatsapp&logoColor=white)](https://api.whatsapp.com/send?text=Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20Engine)
 
 ---
 

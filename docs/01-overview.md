@@ -2,6 +2,8 @@
 
 Welcome to **Kayatix**, the **A.Y.A.T. Engine** (*Automated Yield for Applicant & Talent*). Kayatix is an AI-powered HR copilot designed for elite technical recruiters, hiring managers, and talent acquisition teams.
 
+![Kayatix Platform Banner](/static/img/kayatix-banner.png)
+
 ---
 
 ## 🎯 Core Capabilities
