@@ -149,38 +149,24 @@
 
                                 <div class="row g-3">
                                     <!-- Search Engine ID (cx) -->
-                                    <div class="col-md-6">
+                                    <div class="col-md-12">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <label for="googleCseCx" class="form-label fw-semibold mb-0">
-                                                Search Engine ID (cx) <span class="badge bg-success-subtle text-success ms-1">Primary ID</span>
+                                                Search Engine ID (<code class="small">cx</code>)
+                                                <span class="badge bg-success-subtle text-success ms-1"><i class="bi bi-shield-check"></i> Zero API Keys Required</span>
                                             </label>
                                             <a href="https://programmablesearchengine.google.com/" target="_blank" class="small text-decoration-none">
-                                                <i class="bi bi-box-arrow-up-right"></i> Get Engine ID
+                                                <i class="bi bi-box-arrow-up-right"></i> CSE Control Panel
                                             </a>
                                         </div>
                                         <div class="input-group">
                                             <span class="input-group-text"><i class="bi bi-hash text-muted"></i></span>
-                                            <input type="text" class="form-control font-monospace" id="googleCseCx" placeholder="e.g. c5c6e8ce160ff411e or paste <script>..." value="{{ settings.google_cse_cx_id or '' }}">
+                                            <input type="text" class="form-control font-monospace" id="googleCseCx" placeholder="e.g. f3b25cba6a1c14966 or paste <script>..." value="{{ settings.google_cse_cx_id or '' }}">
                                         </div>
-                                        <div class="form-text">Paste the ID or full script tag from <a href="https://programmablesearchengine.google.com/" target="_blank">cse.google.com</a>. Auto-extracted!</div>
-                                    </div>
-
-                                    <!-- Google Cloud API Key (Optional) -->
-                                    <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <label for="googleCseKey" class="form-label fw-semibold mb-0">
-                                                Google Cloud API Key <span class="badge bg-secondary-subtle text-secondary ms-1">Optional</span>
-                                            </label>
-                                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="small text-decoration-none">
-                                                <i class="bi bi-box-arrow-up-right"></i> Cloud Console
-                                            </a>
+                                        <div class="form-text">
+                                            Paste your Search Engine ID or the embed code from <a href="https://programmablesearchengine.google.com/" target="_blank">Google Programmable Search Engine</a>.
+                                            <strong>100% Free &bull; Unlimited &bull; No Google Cloud API keys, quotas, or billing needed!</strong>
                                         </div>
-                                        <div class="input-group">
-                                            <span class="input-group-text"><i class="bi bi-key text-muted"></i></span>
-                                            <input type="password" class="form-control font-monospace" id="googleCseKey" placeholder="Optional: AIzaSy... (for backend JSON API)" value="{{ settings.google_cse_api_key or '' }}">
-                                            <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="googleCseKey"><i class="bi bi-eye"></i></button>
-                                        </div>
-                                        <div class="form-text">Only needed for automated backend JSON parsing. Leave blank if using direct search.</div>
                                     </div>
                                 </div>
                             </div>
@@ -503,7 +489,6 @@
             gemini_api_key: document.getElementById('geminiKey').value,
             groq_api_key: document.getElementById('groqKey').value,
             openrouter_api_key: document.getElementById('openrouterKey').value,
-            google_cse_api_key: document.getElementById('googleCseKey').value,
             google_cse_cx_id: document.getElementById('googleCseCx').value,
             evaluation_mode: document.getElementById('evaluationMode').value,
             subscription_tier: document.getElementById('subscriptionTier').value,
@@ -553,6 +538,9 @@
             initialSettingsSnapshot = getSettingsSnapshot();
             setSyncStatus(true);
             showToast('Configuration saved to database and synchronized successfully!', 'success');
+            if (typeof syncFooterProviderStatus === 'function') {
+                syncFooterProviderStatus();
+            }
         } catch (err) {
             showToast('Failed to update config: ' + err.message, 'danger');
         } finally {
@@ -573,13 +561,12 @@
         resultCard.classList.remove('d-none');
         badge.className = 'badge bg-warning text-dark';
         badge.innerText = 'Testing...';
-        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, OpenRouter, and Google CSE endpoints...</div>';
+        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, OpenRouter, and Google Search Engine...</div>';
 
         const payload = {
             gemini_api_key: document.getElementById('geminiKey').value,
             groq_api_key: document.getElementById('groqKey').value,
             openrouter_api_key: document.getElementById('openrouterKey').value,
-            google_cse_api_key: document.getElementById('googleCseKey').value,
             google_cse_cx_id: document.getElementById('googleCseCx').value
         };
 
@@ -596,7 +583,7 @@
                 { name: 'Google Gemini', item: data.gemini, icon: 'bi-robot' },
                 { name: 'Groq Cloud LPU', item: data.groq, icon: 'bi-lightning-charge' },
                 { name: 'OpenRouter Model Pool', item: data.openrouter, icon: 'bi-diagram-3' },
-                { name: 'Google Custom Search (X-Ray)', item: data.google_cse, icon: 'bi-search' }
+                { name: 'Google Programmable Search (Widget)', item: data.google_cse, icon: 'bi-google' }
             ];
 
             providers.forEach(p => {
@@ -627,6 +614,18 @@
             html += '</div>';
 
             detailsBody.innerHTML = html;
+
+            // Sync status to localStorage and footer badges
+            localStorage.setItem('kayatix_ai_status', JSON.stringify({
+                gemini: data.gemini.status,
+                groq: data.groq.status,
+                openrouter: data.openrouter.status
+            }));
+            if (typeof updateFooterBadge === 'function') {
+                updateFooterBadge('footerBadgeGemini', data.gemini.status, 'Priority 1: Gemini 2.5 Flash');
+                updateFooterBadge('footerBadgeGroq', data.groq.status, 'Priority 2: Groq Llama 3.3 70B');
+                updateFooterBadge('footerBadgeOpenRouter', data.openrouter.status, 'Priority 3: OpenRouter Fallback');
+            }
 
             if (data.overall_ready) {
                 badge.className = 'badge bg-success';

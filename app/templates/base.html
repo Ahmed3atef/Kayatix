@@ -109,10 +109,25 @@
             <div>
                 <strong>Kayatix | A.Y.A.T. Engine</strong> &mdash; <em>Automated Yield for Applicant &amp; Talent</em> &copy; 2026. Built with FastAPI, Pydantic V2 &amp; Multi-Provider AI Fallback.
             </div>
-            <div class="d-flex align-items-center gap-3 mt-2 mt-md-0">
-                <span class="badge bg-secondary-subtle text-secondary border">Priority 1: Gemini 2.5 Flash</span>
-                <span class="badge bg-secondary-subtle text-secondary border">Priority 2: Groq Llama 3.3 70B</span>
-                <span class="badge bg-secondary-subtle text-secondary border">Priority 3: OpenRouter Fallback</span>
+            <div class="d-flex align-items-center gap-2 mt-2 mt-md-0" id="aiProviderFooterBadges">
+                {% set gemini_ready = app_settings is defined and app_settings.GEMINI_API_KEY %}
+                {% set groq_ready = app_settings is defined and app_settings.GROQ_API_KEY %}
+                {% set openrouter_ready = app_settings is defined and app_settings.OPENROUTER_API_KEY %}
+
+                <span id="footerBadgeGemini" class="badge {% if gemini_ready %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="{% if gemini_ready %}Priority 1: Gemini 2.5 Flash (Found &amp; Valid){% else %}Priority 1: Gemini 2.5 Flash (Not Configured){% endif %}">
+                    <i class="bi bi-circle-fill {% if gemini_ready %}text-success{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
+                    <span>Priority 1: Gemini 2.5 Flash</span>
+                </span>
+
+                <span id="footerBadgeGroq" class="badge {% if groq_ready %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="{% if groq_ready %}Priority 2: Groq Llama 3.3 70B (Found &amp; Valid){% else %}Priority 2: Groq Llama 3.3 70B (Not Configured){% endif %}">
+                    <i class="bi bi-circle-fill {% if groq_ready %}text-success{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
+                    <span>Priority 2: Groq Llama 3.3 70B</span>
+                </span>
+
+                <span id="footerBadgeOpenRouter" class="badge {% if openrouter_ready %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="{% if openrouter_ready %}Priority 3: OpenRouter Fallback (Found &amp; Valid){% else %}Priority 3: OpenRouter Fallback (Not Configured){% endif %}">
+                    <i class="bi bi-circle-fill {% if openrouter_ready %}text-success{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
+                    <span>Priority 3: OpenRouter Fallback</span>
+                </span>
             </div>
         </div>
     </footer>

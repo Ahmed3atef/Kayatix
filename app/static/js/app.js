@@ -315,161 +315,103 @@ if (portfolioForm) {
     });
 }
 
-// 3. LinkedIn X-Ray Sourcing Form Submission
+// 3. LinkedIn X-Ray Sourcing Form Submission (Client-Side Widget & Direct Search)
 const xrayForm = document.getElementById('xraySearchForm');
 if (xrayForm) {
-    xrayForm.addEventListener('submit', async (e) => {
+    xrayForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const titleInput = document.getElementById('xrayJobTitle');
-        const skillsInput = document.getElementById('xraySkills');
-        const locInput = document.getElementById('xrayLocation');
-        const maxInput = document.getElementById('xrayMaxResults');
-        const btn = document.getElementById('searchXrayBtn');
-        const emptyState = document.getElementById('xrayEmptyState');
-        const loading = document.getElementById('xrayLoading');
-        const list = document.getElementById('xrayResultsList');
-
-        const skills = skillsInput.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
-        if (!skills.length) {
-            showToast('Please specify at least one skill.', 'warning');
-            return;
-        }
-
-        btn.disabled = true;
-        emptyState.classList.add('d-none');
-        list.classList.add('d-none');
-        loading.classList.remove('d-none');
-
-        const payload = {
-            job_title: titleInput.value.trim(),
-            required_skills: skills,
-            location: locInput.value.trim(),
-            max_results: parseInt(maxInput.value) || 5
-        };
-
-        try {
-            const resp = await fetch('/api/v1/sourcing/linkedin-xray', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!resp.ok) {
-                const errData = await resp.json().catch(() => ({}));
-                throw new Error(errData.detail || `Server returned HTTP ${resp.status}`);
+        if (typeof window.runWidgetSearch === 'function') {
+            window.runWidgetSearch();
+        } else {
+            const googleBtn = document.getElementById('directGoogleSearchBtn');
+            if (googleBtn && googleBtn.href) {
+                window.open(googleBtn.href, '_blank');
             }
-
-            const profiles = await resp.json();
-            if (!profiles || profiles.length === 0) {
-                list.innerHTML = '<div class="alert alert-info">No profiles matched your search parameters. Try broadening your location or skills.</div>';
-            } else {
-                let html = `<div class="d-flex justify-content-between align-items-center mb-3"><h6 class="fw-bold mb-0">Discovered ${profiles.length} Public Profiles:</h6></div>`;
-                profiles.forEach(p => {
-                    const outreachText = `Hi there! I came across your profile regarding your experience as ${payload.job_title} and your background in ${payload.required_skills.slice(0, 2).join(' & ')}. We have an exciting opportunity that matches your skills. Would you be open to connecting?`;
-                    html += `
-                        <div class="card border-0 shadow-sm rounded-3 mb-3 p-3 bg-body-tertiary">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <h6 class="fw-bold mb-1 text-primary">${p.full_title}</h6>
-                                    <a href="${p.linkedin_url}" target="_blank" class="small text-muted text-decoration-none d-inline-block mb-2">
-                                        <i class="bi bi-box-arrow-up-right"></i> ${p.linkedin_url}
-                                    </a>
-                                </div>
-                                <span class="badge bg-primary-subtle text-primary border"><i class="bi bi-linkedin"></i> Public</span>
-                            </div>
-                            <p class="small text-secondary mb-3">${p.snippet}</p>
-                            <div>
-                                <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('${outreachText.replace(/'/g, "\\'")}', 'Outreach template copied!')">
-                                    <i class="bi bi-chat-text"></i> Copy Outreach Template
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                });
-                list.innerHTML = html;
-            }
-            list.classList.remove('d-none');
-            showToast(`Found ${profiles.length} LinkedIn candidate profiles!`, 'success');
-        } catch (err) {
-            const errStr = (err.message || '');
-            const errLower = errStr.toLowerCase();
-            const dorkQuery = `site:linkedin.com/in/ "${payload.job_title}" AND "${payload.location}" AND ${payload.required_skills.map(s => `"${s}"`).join(' AND ')}`;
-            const googleSearchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(dorkQuery);
-            const linkedinKeywords = [payload.job_title, payload.location, ...payload.required_skills.slice(0, 3)].join(' ');
-            const linkedinSearchUrl = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(linkedinKeywords);
-
-            let headerTitle = "Google Cloud Sourcing Notice";
-            let explanation = "";
-
-            if (errLower.includes('does not have the access') || errLower.includes('permission_denied') || errLower.includes('restricted') || errLower.includes('closed')) {
-                headerTitle = "Google Closed Custom Search JSON API for New Projects";
-                explanation = `
-                    <p class="small text-muted mb-2">
-                        Google Cloud has permanently <strong>restricted and deprecated programmatic access</strong> to the legacy Custom Search JSON API (<code>customsearch.googleapis.com</code>) for all newly created Google Cloud projects.
-                    </p>
-                    <div class="p-2 bg-body-tertiary rounded text-danger small font-monospace mb-3 border">
-                        403 Forbidden: "This project does not have the access to Custom Search JSON API."
-                    </div>
-                    <p class="small text-muted mb-3">
-                        Even with the API enabled in Google Cloud Console, Google blocks automated in-app JSON calls for new accounts.
-                        <br>
-                        <strong class="text-success"><i class="bi bi-check-circle-fill me-1"></i> Good news: You do NOT need any API key to source candidates!</strong> Use our 1-click zero-setup alternatives below:
-                    </p>
-                `;
-            } else if (errLower.includes('credentials') || errLower.includes('not configured')) {
-                headerTitle = "Google Cloud API Key Not Configured";
-                explanation = `
-                    <p class="small text-muted mb-3">
-                        Google Cloud API credentials are not configured in Settings.
-                        <br>
-                        <strong>You do NOT need Google Cloud Console to source candidates!</strong> Choose one of the 1-click zero-setup options below:
-                    </p>
-                `;
-            } else {
-                headerTitle = "Sourcing Engine Notice";
-                explanation = `
-                    <p class="small text-danger mb-2">${escapeHtml(errStr)}</p>
-                    <p class="small text-muted mb-3">
-                        You can immediately source candidates using our direct 1-click search or the browser-embedded CSE widget:
-                    </p>
-                `;
-            }
-
-            list.innerHTML = `
-                <div class="alert alert-warning border border-warning-subtle rounded-4 p-4 shadow-sm">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <i class="bi bi-shield-exclamation text-warning fs-4"></i>
-                        <h5 class="fw-bold mb-0 text-dark">${headerTitle}</h5>
-                    </div>
-                    ${explanation}
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                        <a href="${googleSearchUrl}" target="_blank" class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-2">
-                            <i class="bi bi-google"></i>
-                            <span>Open 1-Click Search on Google (0 Setup)</span>
-                            <i class="bi bi-box-arrow-up-right small"></i>
-                        </a>
-                        <button type="button" class="btn btn-outline-success btn-sm fw-semibold d-flex align-items-center gap-1" onclick="switchToCSEWidget()">
-                            <i class="bi bi-window me-1"></i> Use Free CSE Widget (No Key Needed)
-                        </button>
-                        <a href="${linkedinSearchUrl}" target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
-                            <i class="bi bi-linkedin text-primary"></i>
-                            <span>Open in LinkedIn Search</span>
-                            <i class="bi bi-box-arrow-up-right small"></i>
-                        </a>
-                    </div>
-                    <div class="small text-secondary border-top pt-2 mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <span class="text-truncate max-w-400">Query: <code class="small">${escapeHtml(dorkQuery)}</code></span>
-                        <a href="/documentation/05-linkedin-xray-sourcing" class="text-decoration-none small text-primary">
-                            <i class="bi bi-book me-1"></i> Read Sourcing Docs
-                        </a>
-                    </div>
-                </div>
-            `;
-            list.classList.remove('d-none');
-            showToast('Google API restricted. Please use 1-Click Google Search or CSE Widget below!', 'warning');
-        } finally {
-            loading.classList.add('d-none');
-            btn.disabled = false;
         }
     });
 }
+
+// 4. Footer AI Provider Status Synchronization
+function updateFooterBadge(elementId, status, providerLabel) {
+    const badge = document.getElementById(elementId);
+    if (!badge) return;
+
+    const icon = badge.querySelector('.bi-circle-fill');
+
+    badge.classList.remove(
+        'bg-success-subtle', 'text-success', 'border-success-subtle',
+        'bg-danger-subtle', 'text-danger', 'border-danger-subtle',
+        'bg-secondary-subtle', 'text-secondary'
+    );
+    if (icon) {
+        icon.classList.remove('text-success', 'text-danger', 'text-secondary', 'opacity-50');
+    }
+
+    const isValid = status === 'valid' || status === true;
+    const isInvalid = status === 'invalid';
+
+    if (isValid) {
+        badge.classList.add('bg-success-subtle', 'text-success', 'border', 'border-success-subtle');
+        if (icon) icon.classList.add('text-success');
+        badge.setAttribute('title', `${providerLabel} (Found & Valid)`);
+    } else if (isInvalid) {
+        badge.classList.add('bg-danger-subtle', 'text-danger', 'border', 'border-danger-subtle');
+        if (icon) icon.classList.add('text-danger');
+        badge.setAttribute('title', `${providerLabel} (Invalid Key)`);
+    } else {
+        badge.classList.add('bg-secondary-subtle', 'text-secondary', 'border');
+        if (icon) icon.classList.add('text-secondary', 'opacity-50');
+        badge.setAttribute('title', `${providerLabel} (Not Configured)`);
+    }
+}
+
+async function syncFooterProviderStatus() {
+    // 1. Read cached status from localStorage if present
+    try {
+        const cachedStr = localStorage.getItem('kayatix_ai_status');
+        if (cachedStr) {
+            const cached = JSON.parse(cachedStr);
+            if (cached.gemini) updateFooterBadge('footerBadgeGemini', cached.gemini, 'Priority 1: Gemini 2.5 Flash');
+            if (cached.groq) updateFooterBadge('footerBadgeGroq', cached.groq, 'Priority 2: Groq Llama 3.3 70B');
+            if (cached.openrouter) updateFooterBadge('footerBadgeOpenRouter', cached.openrouter, 'Priority 3: OpenRouter Fallback');
+        }
+    } catch (_) {}
+
+    // 2. Fetch live settings status to sync with active DB
+    try {
+        const res = await fetch('/api/v1/settings');
+        if (res.ok) {
+            const settings = await res.json();
+            const cached = JSON.parse(localStorage.getItem('kayatix_ai_status') || '{}');
+
+            if (cached.gemini !== 'invalid') {
+                updateFooterBadge(
+                    'footerBadgeGemini',
+                    settings.gemini_api_key_configured ? 'valid' : 'unconfigured',
+                    'Priority 1: Gemini 2.5 Flash'
+                );
+            }
+            if (cached.groq !== 'invalid') {
+                updateFooterBadge(
+                    'footerBadgeGroq',
+                    settings.groq_api_key_configured ? 'valid' : 'unconfigured',
+                    'Priority 2: Groq Llama 3.3 70B'
+                );
+            }
+            if (cached.openrouter !== 'invalid') {
+                updateFooterBadge(
+                    'footerBadgeOpenRouter',
+                    settings.openrouter_api_key_configured ? 'valid' : 'unconfigured',
+                    'Priority 3: OpenRouter Fallback'
+                );
+            }
+        }
+    } catch (_) {}
+}
+
+window.updateFooterBadge = updateFooterBadge;
+window.syncFooterProviderStatus = syncFooterProviderStatus;
+
+document.addEventListener('DOMContentLoaded', () => {
+    syncFooterProviderStatus();
+});

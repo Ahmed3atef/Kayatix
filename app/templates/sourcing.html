@@ -18,11 +18,8 @@
                 <p class="text-muted small mb-0">Programmatic discovery of publicly indexed LinkedIn profiles using Google Custom Search JSON API (Zero account bans).</p>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-success-subtle text-success border border-success-subtle p-2">
-                    <i class="bi bi-shield-check me-1"></i> Zero Ban Risk
-                </span>
                 <a href="/settings" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-gear"></i> Configure CSE Keys
+                    <i class="bi bi-gear"></i> Configure Search Engine
                 </a>
             </div>
         </div>
@@ -74,9 +71,13 @@
                                 <code class="small text-break d-block" id="dorkPreview">site:linkedin.com/in/ "Job Title" AND "Location" AND "Skills"</code>
                             </div>
 
-                            <!-- 1-Click Instant Search Buttons (Zero API Keys / Zero Google Console Required) -->
-                            <div class="mb-4">
+                            <!-- Sourcing Action Buttons (Zero API Keys Required) -->
+                            <div class="mb-3">
                                 <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-success py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="searchWidgetBtn">
+                                        <i class="bi bi-window"></i>
+                                        <span>Search in Google CSE Widget</span>
+                                    </button>
                                     <a id="directGoogleSearchBtn" href="https://www.google.com" target="_blank" class="btn btn-primary py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
                                         <i class="bi bi-google"></i>
                                         <span>Open 1-Click Search on Google (0 Setup)</span>
@@ -89,72 +90,46 @@
                                     </a>
                                 </div>
                             </div>
-
-                            <div class="border-top pt-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="small fw-semibold text-muted text-uppercase">Programmatic Backend API</span>
-                                    <span class="badge bg-secondary-subtle text-secondary small">Requires Legacy GCP Project</span>
-                                </div>
-                                <button type="submit" class="btn btn-outline-success w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="searchXrayBtn">
-                                    <i class="bi bi-robot"></i>
-                                    <span>Automated In-App Sourcing</span>
-                                </button>
-                                <div class="form-text small">Notice: Google deprecated this JSON API for new projects. Use the 1-Click Search above or CSE Widget tab for guaranteed zero-setup results.</div>
-                            </div>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Search Results Column -->
+            <!-- Right Search Engine Widget Column -->
             <div class="col-lg-7">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-header border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
-                            <i class="bi bi-linkedin text-primary"></i> Discovered Public LinkedIn Candidates
+                            <i class="bi bi-google text-primary"></i> Google Interactive Sourcing Engine
                         </h5>
-                        {% if settings.google_cse_cx_id %}
-                        <ul class="nav nav-pills nav-sm card-header-pills" id="sourcingTab" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active py-1 px-3 small" id="api-results-tab" data-bs-toggle="tab" data-bs-target="#api-results-pane" type="button" role="tab">In-App API</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link py-1 px-3 small" id="widget-tab" data-bs-toggle="tab" data-bs-target="#widget-pane" type="button" role="tab">
-                                    <i class="bi bi-google me-1"></i> CSE Widget (Zero Key)
-                                </button>
-                            </li>
-                        </ul>
-                        {% endif %}
                     </div>
                     <div class="card-body p-4">
                         {% if settings.google_cse_cx_id %}
-                        <div class="tab-content" id="sourcingTabContent">
-                            <div class="tab-pane fade show active" id="api-results-pane" role="tabpanel">
-                        {% endif %}
-
-                        <div id="xrayLoading" class="text-center py-5 d-none">
-                            <div class="spinner-border text-success" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
-                            <h5 class="fw-bold mt-3 text-secondary">Querying Google Custom Search API</h5>
-                            <p class="text-muted small">Executing dork query &bull; Indexing matching candidate profiles...</p>
-                        </div>
-
-                        <div id="xrayEmptyState" class="text-center py-5 text-muted">
-                            <i class="bi bi-people-fill fs-1 text-secondary opacity-50 mb-3 d-block"></i>
-                            <h5 class="fw-semibold">Ready to Source Candidates</h5>
-                            <p class="small max-w-400 mx-auto">Fill in the role, location, and key skills on the left. Click <strong>Open 1-Click Search on Google</strong> for instant zero-configuration discovery, or use <strong>Automated In-App Sourcing</strong>.</p>
-                        </div>
-
-                        <div id="xrayResultsList" class="d-none"></div>
-
-                        {% if settings.google_cse_cx_id %}
+                        <div class="alert alert-info small mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <i class="bi bi-info-circle-fill me-1"></i>
+                                Connected to Search Engine ID (<code>{{ settings.google_cse_cx_id }}</code>) &bull; <strong>100% Free &bull; Unlimited &bull; Zero API Keys</strong>
                             </div>
-                            <div class="tab-pane fade" id="widget-pane" role="tabpanel">
-                                <div class="alert alert-info small mb-3">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    This interactive Google Programmable Search engine runs on your Search Engine ID (<code>{{ settings.google_cse_cx_id }}</code>) directly in the browser &mdash; <strong>100% free, unlimited, with zero Google Cloud API keys needed!</strong>
-                                </div>
-                                <script async src="https://cse.google.com/cse.js?cx={{ settings.google_cse_cx_id }}"></script>
-                                <div class="gcse-search" data-gname="sourcingSearch"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" onclick="runWidgetSearch()">
+                                <i class="bi bi-search me-1"></i> Search Criteria
+                            </button>
+                        </div>
+                        <script async src="https://cse.google.com/cse.js?cx={{ settings.google_cse_cx_id }}"></script>
+                        <div class="gcse-search" data-gname="sourcingSearch"></div>
+                        {% else %}
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-window-sidebar fs-1 text-primary opacity-50 mb-3 d-block"></i>
+                            <h5 class="fw-semibold text-dark">Google Search Engine ID Not Configured</h5>
+                            <p class="small max-w-400 mx-auto mb-3">
+                                Paste your free Search Engine ID (<code class="small">cx</code>) in Settings to embed Google's interactive sourcing engine directly into this page.
+                            </p>
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="/settings" class="btn btn-outline-primary btn-sm fw-semibold">
+                                    <i class="bi bi-gear me-1"></i> Configure Search Engine ID
+                                </a>
+                                <a id="directGoogleSearchEmptyBtn" href="https://www.google.com" target="_blank" class="btn btn-primary btn-sm fw-semibold">
+                                    <i class="bi bi-google me-1"></i> Use 1-Click Search on Google
+                                </a>
                             </div>
                         </div>
                         {% endif %}
@@ -203,8 +178,8 @@
         copyToClipboard(dork, 'Boolean Dork query copied to clipboard!');
     });
 
-    // Interactive CSE Widget Execution
-    window.triggerWidgetSearch = function() {
+    // Run search in Google CSE Widget
+    window.runWidgetSearch = function() {
         const dork = document.getElementById('dorkPreview')?.innerText;
         if (!dork) return;
         try {
@@ -213,20 +188,17 @@
                            Object.values(google.search.cse.element.getAllElements() || {})[0];
                 if (el && typeof el.execute === 'function') {
                     el.execute(dork);
+                    showToast('Executing search in Google CSE Widget...', 'success');
+                    return;
                 }
+            }
+            // Fallback: If widget element not yet initialized, open direct search
+            const googleBtn = document.getElementById('directGoogleSearchBtn');
+            if (googleBtn && googleBtn.href) {
+                window.open(googleBtn.href, '_blank');
             }
         } catch (e) {
             console.warn('CSE widget execution:', e);
-        }
-    };
-
-    window.switchToCSEWidget = function() {
-        const widgetTab = document.getElementById('widget-tab');
-        if (widgetTab) {
-            const bsTab = bootstrap.Tab.getOrCreateInstance(widgetTab);
-            bsTab.show();
-            setTimeout(window.triggerWidgetSearch, 350);
-        } else {
             const googleBtn = document.getElementById('directGoogleSearchBtn');
             if (googleBtn && googleBtn.href) {
                 window.open(googleBtn.href, '_blank');
@@ -234,8 +206,10 @@
         }
     };
 
-    document.getElementById('widget-tab')?.addEventListener('shown.bs.tab', () => {
-        setTimeout(window.triggerWidgetSearch, 300);
+    // Form submit triggers widget search
+    document.getElementById('xraySearchForm')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        runWidgetSearch();
     });
 
     // Initialize links on load

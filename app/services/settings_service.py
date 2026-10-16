@@ -322,7 +322,8 @@ async def validate_database_connection(raw_url: Optional[str] = None) -> Databas
     start_time = time.perf_counter()
     temp_engine = None
     try:
-        temp_engine = create_async_engine(normalized, echo=False)
+        from app.core.database import create_engine_for_url
+        temp_engine = create_engine_for_url(normalized)
         async with temp_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
             tables = []
@@ -570,43 +571,18 @@ async def validate_google_cse_keys(
     api_key: Optional[str], cx_id: Optional[str]
 ) -> ProviderValidationStatus:
     clean_cx = clean_google_cx_id(cx_id)
-    if not clean_cx and not api_key:
+    if not clean_cx:
         return ProviderValidationStatus(
             status="unconfigured",
-            message="Search Engine ID (cx) is not configured. You can still use 1-Click Direct Google Sourcing anytime.",
-            model_tested="Google Custom Search (X-Ray)",
-        )
-
-    # If Search Engine ID (cx) is provided, but Google Cloud API Key is omitted
-    if clean_cx and not api_key:
-        return ProviderValidationStatus(
-            status="valid",
-            message=f"Search Engine ID ({clean_cx[:8]}...) is active! Browser widget & 1-Click X-Ray ready. (Google Cloud API key is optional).",
+            message="Search Engine ID (cx) is not configured. (Tip: 1-Click Direct Google Sourcing works anytime without setup).",
             model_tested="Google Programmable Search (Widget Mode)",
         )
 
-    try:
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {"key": api_key, "cx": clean_cx, "q": "test", "num": 1}
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(url, params=params)
-            if resp.status_code == 200:
-                return ProviderValidationStatus(
-                    status="valid",
-                    message="Google Programmable Search JSON API connected successfully.",
-                    model_tested="Google Custom Search API",
-                )
-            return ProviderValidationStatus(
-                status="invalid",
-                message=f"Google CSE API returned HTTP {resp.status_code}: {resp.text[:150]}",
-                model_tested="Google Custom Search API",
-            )
-    except Exception as e:
-        return ProviderValidationStatus(
-            status="invalid",
-            message=f"Google CSE connection failed: {str(e)}",
-            model_tested="Google Custom Search API",
-        )
+    return ProviderValidationStatus(
+        status="valid",
+        message=f"Search Engine ID ({clean_cx[:8]}...) is active! Browser widget & 1-Click X-Ray ready with 0 API keys required.",
+        model_tested="Google Programmable Search (Widget Mode)",
+    )
 
 
 async def validate_all_settings(

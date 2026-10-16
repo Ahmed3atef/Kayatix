@@ -15,6 +15,8 @@ from app.services.settings_service import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+from app.core.config import settings
+templates.env.globals["app_settings"] = settings
 
 router = APIRouter(include_in_schema=False)
 

@@ -40,9 +40,10 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as session:
             await get_or_create_user_settings(session)
 
+            from app.core.database import mask_database_url
             logger.info("=" * 60)
             logger.info(" Kayatix A.Y.A.T. Engine - Active Configuration")
-            logger.info(f" -> Database Backend : {settings.DATABASE_URL}")
+            logger.info(f" -> Database Backend : {mask_database_url(settings.DATABASE_URL)}")
             logger.info(f" -> Google Gemini    : {'[ACTIVE]' if settings.GEMINI_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Groq Cloud       : {'[ACTIVE]' if settings.GROQ_API_KEY else '[NOT SET]'}")
             logger.info(f" -> OpenRouter       : {'[ACTIVE]' if settings.OPENROUTER_API_KEY else '[NOT SET]'}")

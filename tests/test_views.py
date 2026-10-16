@@ -112,9 +112,32 @@ async def test_documentation_page_by_slug(client):
     """Verifies that individual documentation sections can be browsed by slug."""
     # Test specific page: 05-linkedin-xray-sourcing
     response = await client.get("/documentation/05-linkedin-xray-sourcing")
-    assert response.status_code == 200
-    assert "API_KEY_SERVICE_BLOCKED" in response.text
-    assert "Google Custom Search" in response.text
+    assert "Zero API Keys" in response.text or "Search Engine ID" in response.text
     assert "05-linkedin-xray-sourcing.md" in response.text
+
+
+@pytest.mark.asyncio
+async def test_footer_ai_provider_indicators(client):
+    """Verifies that footer priority pills render green when keys are active and found."""
+    from app.core.config import settings
+
+    # 1. With keys active
+    settings.GEMINI_API_KEY = "test_gemini_key"
+    settings.GROQ_API_KEY = "test_groq_key"
+    settings.OPENROUTER_API_KEY = ""
+
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert 'id="footerBadgeGemini"' in html
+    assert 'id="footerBadgeGroq"' in html
+    assert 'id="footerBadgeOpenRouter"' in html
+
+    # Gemini and Groq should have green badge classes
+    assert 'id="footerBadgeGemini" class="badge bg-success-subtle text-success' in html
+    assert 'id="footerBadgeGroq" class="badge bg-success-subtle text-success' in html
+    # OpenRouter without key should be secondary
+    assert 'id="footerBadgeOpenRouter" class="badge bg-secondary-subtle text-secondary' in html
 
 

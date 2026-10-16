@@ -233,4 +233,23 @@ async def test_get_or_create_user_settings_reads_existing_or_creates_defaults(db
     assert fetched.subscription_tier == "enterprise"
 
 
+def test_create_engine_for_url_pooling_and_pre_ping():
+    """Verifies that engine pool pre-ping and pooler statement cache settings are applied."""
+    from app.core.database import create_engine_for_url
+
+    # 1. SQLite Engine
+    sqlite_eng = create_engine_for_url("sqlite+aiosqlite:///./test_pool.db")
+    assert sqlite_eng.pool._pre_ping is True
+    assert sqlite_eng.pool._recycle == 300
+
+    # 2. Neon / Serverless PgBouncer Engine
+    neon_url = "postgresql+asyncpg://user:pass@ep-test-pooler.c-7.us-east-2.aws.neon.tech/kaya_db?ssl=require"
+    pg_eng = create_engine_for_url(neon_url)
+    assert pg_eng.pool._pre_ping is True
+    assert pg_eng.pool._recycle == 300
+    assert pg_eng.pool.size() == 10
+    assert pg_eng.url.query.get("statement_cache_size") is None  # passed via connect_args
+
+
+
 

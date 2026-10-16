@@ -78,7 +78,36 @@ class Base(DeclarativeBase):
     pass
 
 
-engine: AsyncEngine = create_async_engine(normalize_database_url(settings.DATABASE_URL), echo=False)
+def create_engine_for_url(url: str) -> AsyncEngine:
+    """
+    Builds an AsyncEngine configured with pre-ping validation and connection recycling.
+
+    - pool_pre_ping=True: Emits a lightweight ping whenever checking out a connection
+      from the pool. If Neon, Supabase, or any cloud PostgreSQL host dropped the idle TCP socket,
+      the dead connection is transparently replaced instead of raising 'InterfaceError: connection is closed'.
+    - pool_recycle=300: Refreshes idle connections before remote servers close them.
+    - statement_cache_size=0: Prevents prepared statement cache desync when connecting
+      through PgBouncer / Neon poolers / Supabase transaction poolers.
+    """
+    engine_kwargs: dict = {
+        "echo": False,
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
+    if "postgresql" in url:
+        connect_args: dict = {}
+        # Disable prepared statement caching when connecting through transaction poolers
+        if any(h in url for h in ["-pooler", "pooler", "pgbouncer", "neon.tech", "supabase"]):
+            connect_args["statement_cache_size"] = 0
+            connect_args["command_timeout"] = 60
+        if connect_args:
+            engine_kwargs["connect_args"] = connect_args
+        engine_kwargs["pool_size"] = 10
+        engine_kwargs["max_overflow"] = 20
+    return create_async_engine(url, **engine_kwargs)
+
+
+engine: AsyncEngine = create_engine_for_url(normalize_database_url(settings.DATABASE_URL))
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -91,7 +120,7 @@ async def switch_database_engine(new_url: str) -> str:
     normalized = normalize_database_url(new_url)
     old_engine = engine
 
-    new_engine = create_async_engine(normalized, echo=False)
+    new_engine = create_engine_for_url(normalized)
     async with new_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

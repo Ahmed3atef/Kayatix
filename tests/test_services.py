@@ -113,6 +113,7 @@ async def test_execute_linkedin_xray_search_missing_credentials():
     with (
         patch.object(settings, "GOOGLE_CSE_API_KEY", None),
         patch.object(settings, "GOOGLE_CSE_CX_ID", None),
+        patch.object(settings, "GEMINI_API_KEY", None),
         patch("app.core.database.AsyncSessionLocal", side_effect=Exception("No DB")),
     ):
         with pytest.raises(ValueError, match="Google Custom Search API credentials are not configured"):
@@ -191,6 +192,7 @@ async def test_execute_linkedin_xray_search_google_new_project_restriction():
     with (
         patch.object(settings, "GOOGLE_CSE_API_KEY", "valid_key"),
         patch.object(settings, "GOOGLE_CSE_CX_ID", "valid_cx"),
+        patch.object(settings, "GEMINI_API_KEY", None),
         patch("httpx.AsyncClient.get") as mock_get,
     ):
         mock_resp = MagicMock()
