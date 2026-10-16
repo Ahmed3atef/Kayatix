@@ -17,11 +17,12 @@ class Settings(BaseSettings):
     GOOGLE_CSE_CX_ID: Optional[str] = None
 
     # Engine & Subscription defaults
-    EVALUATION_MODE: str = "hybrid"  # "hybrid", "llm_cascade", "local_offline"
+    EVALUATION_MODE: str = "llm_cascade"
     SUBSCRIPTION_TIER: str = "standard"
     RATE_LIMIT_RPM: int = 15
 
     model_config = SettingsConfigDict(
+        env_file=".env",
         extra="ignore"
     )
 

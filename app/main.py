@@ -21,17 +21,32 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        # Self-healing column migration for SQLite
+        # Self-healing column migration for both PostgreSQL and SQLite
         def migrate_schema(sync_conn):
+            # Try PostgreSQL syntax first
             try:
-                res = sync_conn.exec_driver_sql("PRAGMA table_info(user_settings)").fetchall()
-                existing_cols = {row[1] for row in res}
-                if existing_cols and "evaluation_mode" not in existing_cols:
-                    sync_conn.exec_driver_sql(
-                        "ALTER TABLE user_settings ADD COLUMN evaluation_mode VARCHAR(50) DEFAULT 'hybrid'"
-                    )
+                sync_conn.exec_driver_sql(
+                    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS database_url VARCHAR(1024)"
+                )
+                sync_conn.exec_driver_sql(
+                    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS evaluation_mode VARCHAR(50) DEFAULT 'llm_cascade'"
+                )
             except Exception:
-                pass
+                # SQLite fallback
+                try:
+                    res = sync_conn.exec_driver_sql("PRAGMA table_info(user_settings)").fetchall()
+                    existing_cols = {row[1] for row in res}
+                    if existing_cols:
+                        if "database_url" not in existing_cols:
+                            sync_conn.exec_driver_sql(
+                                "ALTER TABLE user_settings ADD COLUMN database_url VARCHAR(1024)"
+                            )
+                        if "evaluation_mode" not in existing_cols:
+                            sync_conn.exec_driver_sql(
+                                "ALTER TABLE user_settings ADD COLUMN evaluation_mode VARCHAR(50) DEFAULT 'llm_cascade'"
+                            )
+                except Exception:
+                    pass
 
         await conn.run_sync(migrate_schema)
 

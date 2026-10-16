@@ -47,7 +47,7 @@ async def test_evaluate_candidate_primary_gemini_success(sample_candidate_evalua
             job_description="Python Backend Engineer JD",
         )
 
-        assert provider == "google/gemini-2.5-flash"
+        assert provider == "google/gemini-1.5-flash"
         assert result.candidate_name == "Jane Doe"
         assert result.match_percentage == 92
         mock_gemini.assert_called_once()

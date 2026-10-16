@@ -113,6 +113,7 @@ async def test_execute_linkedin_xray_search_missing_credentials():
     with (
         patch.object(settings, "GOOGLE_CSE_API_KEY", None),
         patch.object(settings, "GOOGLE_CSE_CX_ID", None),
+        patch("app.core.database.AsyncSessionLocal", side_effect=Exception("No DB")),
     ):
         with pytest.raises(ValueError, match="Google Custom Search API credentials are not configured"):
             await execute_linkedin_xray_search(req)

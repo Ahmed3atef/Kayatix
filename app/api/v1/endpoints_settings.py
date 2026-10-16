@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.payloads import (
+    DatabaseValidationRequest,
+    DatabaseValidationResponse,
     JobTemplateCreateRequest,
     JobTemplateResponse,
     JobTemplateUpdateRequest,
@@ -21,6 +23,7 @@ from app.services.settings_service import (
     update_job_template,
     update_user_settings,
     validate_all_settings,
+    validate_database_connection,
 )
 
 router = APIRouter(prefix="/api/v1/settings", tags=["User Settings & Accounts"])
@@ -46,6 +49,12 @@ async def validate_credentials(
 ):
     """Validates connectivity to all configured AI providers and Google CSE."""
     return await validate_all_settings(payload, db)
+
+
+@router.post("/validate-database", response_model=DatabaseValidationResponse)
+async def validate_database_endpoint(payload: DatabaseValidationRequest):
+    """Validates connectivity to a PostgreSQL or SQLite database link."""
+    return await validate_database_connection(payload.database_url)
 
 
 # ==============================================================================

@@ -113,3 +113,68 @@ async def test_validate_google_cse_keys_cx_only():
     assert result.status == "valid"
     assert "Browser widget & 1-Click X-Ray ready" in result.message
 
+
+def test_normalize_database_url():
+    """Verifies that database URLs are properly converted to asyncpg and cleaned of unsupported parameters."""
+    from app.core.database import normalize_database_url
+
+    # SQLite
+    sqlite_res = normalize_database_url("sqlite:///./hr_copilot.db")
+    assert sqlite_res.startswith("sqlite+aiosqlite:///")
+
+    # Standard PostgreSQL link with asyncpg driver injection
+    pg_res = normalize_database_url("postgresql://user:pass@localhost:5432/testdb")
+    assert pg_res.startswith("postgresql+asyncpg://user:pass@localhost:5432/testdb")
+
+    # Neon PostgreSQL link with sslmode and channel_binding query params
+    neon_url = "postgresql://kaya_db_owner:npg_secret@ep-billowing-voice-b5etyv61-pooler.c-7.us-east-2.aws.neon.tech/kaya_db?sslmode=require&channel_binding=require"
+    neon_res = normalize_database_url(neon_url)
+    assert neon_res.startswith("postgresql+asyncpg://kaya_db_owner:npg_secret@ep-billowing-voice-b5etyv61-pooler.c-7.us-east-2.aws.neon.tech/kaya_db")
+    assert "ssl=require" in neon_res
+    assert "sslmode" not in neon_res
+    assert "channel_binding" not in neon_res
+
+
+@pytest.mark.asyncio
+async def test_validate_database_connection_sqlite():
+    """Verifies live validation logic for SQLite database."""
+    from app.services.settings_service import validate_database_connection
+
+    # Valid in-memory or file SQLite
+    res = await validate_database_connection("sqlite+aiosqlite:///:memory:")
+    assert res.status == "valid"
+    assert res.database_type == "sqlite"
+    assert res.latency_ms is not None
+
+    # Invalid connection string / dialect
+    bad_res = await validate_database_connection("unknown_scheme://bad_host/db")
+    assert bad_res.status == "invalid"
+    assert "Unsupported database scheme" in bad_res.message
+
+
+@pytest.mark.asyncio
+async def test_validate_database_api_endpoint(client):
+    """Verifies POST /api/v1/settings/validate-database endpoint."""
+    resp = await client.post(
+        "/api/v1/settings/validate-database",
+        json={"database_url": "sqlite+aiosqlite:///:memory:"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "valid"
+    assert data["database_type"] == "sqlite"
+    assert "latency_ms" in data
+
+
+@pytest.mark.asyncio
+async def test_settings_page_renders_database_engine_section(client):
+    """Verifies that the Settings UI displays database engine switcher and controls."""
+    resp = await client.get("/settings")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "Database Engine Backend" in html
+    assert "id=\"databaseUrlInput\"" in html
+    assert "id=\"testDbConnBtn\"" in html
+    assert "id=\"dbChoiceSqlite\"" in html
+    assert "id=\"dbChoicePostgres\"" in html
+

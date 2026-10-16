@@ -1,14 +1,24 @@
 import logging
+import os
 import re
+import time
 from typing import List, Optional
+from fastapi import HTTPException
 import httpx
 from google import genai
 from openai import AsyncOpenAI
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.core.config import settings
+from app.core.database import (
+    DEFAULT_SQLITE_URL,
+    AsyncSessionLocal,
+    normalize_database_url,
+    switch_database_engine,
+)
 from app.models.domain import JobTemplate, UserSettings
 from app.schemas.payloads import (
+    DatabaseValidationResponse,
     JobTemplateCreateRequest,
     JobTemplateResponse,
     JobTemplateUpdateRequest,
@@ -41,16 +51,17 @@ def clean_google_cx_id(raw_cx: Optional[str]) -> Optional[str]:
 DEFAULT_PROJECT_NAME = "Kayatix - A.Y.A.T. Engine"
 DEFAULT_VERSION = "1.0.0"
 DEFAULT_SUBSCRIPTION_TIER = "standard"
-DEFAULT_EVALUATION_MODE = "hybrid"
+DEFAULT_EVALUATION_MODE = "llm_cascade"
 DEFAULT_RATE_LIMIT_RPM = 15
 
 
 def generate_config_text(record: UserSettings) -> str:
     """Generates standardized key-value configuration text from database record."""
+    active_db = record.database_url or settings.DATABASE_URL
     return (
         f'PROJECT_NAME="{record.project_name or DEFAULT_PROJECT_NAME}"\n'
         f'VERSION="{record.version or DEFAULT_VERSION}"\n'
-        f'DATABASE_URL="{settings.DATABASE_URL}"\n\n'
+        f'DATABASE_URL="{active_db}"\n\n'
         f'# AI Provider Keys\n'
         f'GEMINI_API_KEY="{record.gemini_api_key or ""}"\n'
         f'GROQ_API_KEY="{record.groq_api_key or ""}"\n'
@@ -99,6 +110,7 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
             subscription_tier=DEFAULT_SUBSCRIPTION_TIER,
             evaluation_mode=DEFAULT_EVALUATION_MODE,
             rate_limit_rpm=DEFAULT_RATE_LIMIT_RPM,
+            database_url=settings.DATABASE_URL,
         )
         user_settings.env_content = generate_config_text(user_settings)
         db.add(user_settings)
@@ -122,6 +134,8 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
         settings.EVALUATION_MODE = user_settings.evaluation_mode
     if user_settings.rate_limit_rpm:
         settings.RATE_LIMIT_RPM = user_settings.rate_limit_rpm
+    if user_settings.database_url:
+        settings.DATABASE_URL = user_settings.database_url
 
     return user_settings
 
@@ -130,6 +144,8 @@ async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
     """Returns configuration overview, secret status, and raw configuration representation."""
     record = await get_or_create_user_settings(db)
     env_str = record.env_content or generate_config_text(record)
+    active_db = record.database_url or settings.DATABASE_URL
+    db_type = "postgresql" if "postgres" in active_db.lower() else "sqlite"
 
     return UserSettingsResponse(
         gemini_api_key_configured=bool(record.gemini_api_key),
@@ -140,6 +156,8 @@ async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
         subscription_tier=record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER,
         evaluation_mode=record.evaluation_mode or DEFAULT_EVALUATION_MODE,
         rate_limit_rpm=record.rate_limit_rpm or DEFAULT_RATE_LIMIT_RPM,
+        database_url=active_db,
+        database_type=db_type,
         env_content=env_str,
         updated_at=record.updated_at.isoformat() if record.updated_at else None,
     )
@@ -209,6 +227,89 @@ async def update_user_settings(
         record.rate_limit_rpm = req.rate_limit_rpm
         settings.RATE_LIMIT_RPM = record.rate_limit_rpm
 
+    # Check if database_url is provided in raw env or structured request
+    target_db_url = None
+    if req.env_content is not None and req.env_content.strip():
+        parsed = parse_config_text(req.env_content)
+        if "DATABASE_URL" in parsed and parsed["DATABASE_URL"].strip():
+            target_db_url = parsed["DATABASE_URL"].strip()
+    if req.database_url is not None and req.database_url.strip():
+        target_db_url = req.database_url.strip()
+
+    if target_db_url:
+        normalized_target = normalize_database_url(target_db_url)
+        current_normalized = normalize_database_url(record.database_url or settings.DATABASE_URL)
+        if normalized_target != current_normalized:
+            # Validate target connection first
+            val = await validate_database_connection(normalized_target)
+            if val.status != "valid":
+                raise HTTPException(status_code=400, detail=f"Cannot switch database: {val.message}")
+
+            # Grab existing templates from current db session to migrate
+            existing_templates = await get_all_job_templates(db)
+            saved_settings = {
+                "project_name": record.project_name,
+                "version": record.version,
+                "gemini_api_key": req.gemini_api_key.strip() if req.gemini_api_key is not None else record.gemini_api_key,
+                "groq_api_key": req.groq_api_key.strip() if req.groq_api_key is not None else record.groq_api_key,
+                "openrouter_api_key": req.openrouter_api_key.strip() if req.openrouter_api_key is not None else record.openrouter_api_key,
+                "google_cse_api_key": req.google_cse_api_key.strip() if req.google_cse_api_key is not None else record.google_cse_api_key,
+                "google_cse_cx_id": clean_google_cx_id(req.google_cse_cx_id) if req.google_cse_cx_id is not None else record.google_cse_cx_id,
+                "subscription_tier": req.subscription_tier or record.subscription_tier,
+                "evaluation_mode": req.evaluation_mode or record.evaluation_mode,
+                "rate_limit_rpm": req.rate_limit_rpm or record.rate_limit_rpm,
+                "database_url": normalized_target,
+            }
+
+            # Switch live engine
+            await switch_database_engine(normalized_target)
+
+            # Populate target database
+            async with AsyncSessionLocal() as new_db:
+                new_rec_res = await new_db.execute(select(UserSettings).limit(1))
+                new_rec = new_rec_res.scalar_one_or_none()
+                if not new_rec:
+                    new_rec = UserSettings(**saved_settings)
+                    new_rec.env_content = generate_config_text(new_rec)
+                    new_db.add(new_rec)
+                else:
+                    for k, v in saved_settings.items():
+                        setattr(new_rec, k, v)
+                    new_rec.env_content = generate_config_text(new_rec)
+
+                # Migrate templates if target database has none
+                tpl_res = await new_db.execute(select(JobTemplate).limit(1))
+                if not tpl_res.scalar_one_or_none() and existing_templates:
+                    for t in existing_templates:
+                        new_db.add(JobTemplate(title=t.title, category=t.category, description=t.description))
+
+                await new_db.commit()
+                await new_db.refresh(new_rec)
+                record = new_rec
+                db = new_db
+
+            # Persist DATABASE_URL to .env on disk for subsequent process restarts
+            try:
+                env_path = ".env"
+                env_lines = []
+                if os.path.exists(env_path):
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        env_lines = f.readlines()
+                db_url_found = False
+                new_lines = []
+                for line in env_lines:
+                    if line.startswith("DATABASE_URL="):
+                        new_lines.append(f'DATABASE_URL="{normalized_target}"\n')
+                        db_url_found = True
+                    else:
+                        new_lines.append(line)
+                if not db_url_found:
+                    new_lines.append(f'DATABASE_URL="{normalized_target}"\n')
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.writelines(new_lines)
+            except Exception as e:
+                logger.warning(f"Could not persist DATABASE_URL to .env file: {e}")
+
     # Regenerate fresh config representation to stay consistent
     record.env_content = generate_config_text(record)
 
@@ -218,36 +319,152 @@ async def update_user_settings(
     return await get_settings_summary(db)
 
 
+async def validate_database_connection(raw_url: str) -> DatabaseValidationResponse:
+    """Validates connectivity to a PostgreSQL or SQLite database link."""
+    if not raw_url or not raw_url.strip():
+        return DatabaseValidationResponse(
+            status="invalid",
+            message="Database connection link cannot be empty.",
+            database_type="unknown",
+        )
+    normalized = normalize_database_url(raw_url)
+    if not (normalized.startswith("postgresql+asyncpg://") or normalized.startswith("sqlite+aiosqlite://")):
+        return DatabaseValidationResponse(
+            status="invalid",
+            message=f"Unsupported database scheme. Connection URL must start with postgresql:// or sqlite:///",
+            database_type="unknown",
+        )
+    db_type = "postgresql" if "postgres" in normalized.lower() else "sqlite"
+    start_time = time.perf_counter()
+    try:
+        temp_engine = create_async_engine(normalized, echo=False)
+        async with temp_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+            tables = []
+            if db_type == "postgresql":
+                res = await conn.execute(
+                    text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+                )
+                tables = [r[0] for r in res.fetchall()]
+            else:
+                res = await conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table'")
+                )
+                tables = [r[0] for r in res.fetchall()]
+
+        await temp_engine.dispose()
+        latency = round((time.perf_counter() - start_time) * 1000, 2)
+        target_name = (
+            "Neon PostgreSQL Cloud"
+            if "neon.tech" in raw_url.lower()
+            else ("PostgreSQL Database" if db_type == "postgresql" else "SQLite Embedded Database")
+        )
+        return DatabaseValidationResponse(
+            status="valid",
+            message=f"Connected successfully to {target_name} ({latency}ms).",
+            database_type=db_type,
+            normalized_url=normalized,
+            latency_ms=latency,
+            tables_found=tables,
+        )
+    except Exception as e:
+        latency = round((time.perf_counter() - start_time) * 1000, 2)
+        return DatabaseValidationResponse(
+            status="invalid",
+            message=f"Database connection failed: {str(e)}",
+            database_type=db_type,
+            latency_ms=latency,
+        )
+
+
 async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatus:
     if not api_key:
         return ProviderValidationStatus(
             status="unconfigured",
             message="No Gemini API Key provided.",
-            model_tested="gemini-2.5-flash",
+            model_tested="gemini-3.8-flash",
         )
+    client = genai.Client(api_key=api_key)
+    
+    preferred_models = [
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-flash-latest",
+        "gemini-3.7-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-1.5-flash",
+    ]
+    models_to_try = list(preferred_models)
     try:
-        client = genai.Client(api_key=api_key)
-        resp = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents="ping",
-        )
-        if resp and resp.text:
-            return ProviderValidationStatus(
-                status="valid",
-                message="Connected successfully to Gemini 2.5 Flash API.",
-                model_tested="gemini-2.5-flash",
+        listed = []
+        for m in client.models.list():
+            name = getattr(m, "name", "") or ""
+            actions = getattr(m, "supported_actions", []) or getattr(m, "supported_generation_methods", []) or []
+            if actions and "generateContent" not in actions:
+                continue
+            name_clean = name.replace("models/", "")
+            if any(k in name_clean.lower() for k in ["tts", "audio", "embed", "imagen", "realtime", "live", "customtools"]):
+                continue
+            listed.append(name_clean)
+        if listed:
+            flash_text = [m for m in listed if "flash" in m.lower()]
+            models_to_try = preferred_models + flash_text + listed
+    except Exception:
+        pass
+
+    seen = set()
+    deduped_models = []
+    for m in models_to_try:
+        if m not in seen:
+            seen.add(m)
+            deduped_models.append(m)
+
+    last_err = ""
+    had_high_demand = False
+    for model_name in deduped_models:
+        try:
+            resp = client.models.generate_content(
+                model=model_name,
+                contents="ping",
             )
+            if resp and resp.text:
+                return ProviderValidationStatus(
+                    status="valid",
+                    message=f"Connected successfully to Gemini API ({model_name}).",
+                    model_tested=model_name,
+                )
+        except Exception as e:
+            err_msg = str(e)
+            last_err = err_msg
+            err_lower = err_msg.lower()
+            if any(k in err_lower for k in ["api_key_invalid", "api key not valid", "permission_denied", "consumer_invalid", "consumer_suspended", "unauthenticated", "401"]):
+                return ProviderValidationStatus(
+                    status="invalid",
+                    message=f"Gemini API key is invalid: {err_msg}",
+                    model_tested=model_name,
+                )
+            if "503" in err_lower or "high demand" in err_lower or "429" in err_lower or "quota" in err_lower:
+                had_high_demand = True
+            # For 404, 400, 503, 429, continue to next model!
+            continue
+
+    if had_high_demand:
+        # Key is authenticated and valid, but Google is experiencing high traffic
         return ProviderValidationStatus(
-            status="invalid",
-            message="Received empty response from Gemini API.",
-            model_tested="gemini-2.5-flash",
+            status="valid",
+            message="Gemini key authenticated successfully. (Note: Google servers currently report high demand spikes; Groq cascade is ready as active fallback).",
+            model_tested=deduped_models[0] if deduped_models else "gemini-3.8-flash",
         )
-    except Exception as e:
-        return ProviderValidationStatus(
-            status="invalid",
-            message=f"Gemini connection failed: {str(e)}",
-            model_tested="gemini-2.5-flash",
-        )
+
+    return ProviderValidationStatus(
+        status="invalid",
+        message=f"Gemini connection failed: {last_err or 'No accessible Gemini models found for this key.'}",
+        model_tested="gemini-3.8-flash",
+    )
 
 
 async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
@@ -255,32 +472,62 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
         return ProviderValidationStatus(
             status="unconfigured",
             message="No Groq API Key provided.",
-            model_tested="llama-3.3-70b-versatile",
+            model_tested="openai/gpt-oss-120b",
         )
+    client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
+
+    models_to_try = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
+        "allam-2-7b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+    ]
     try:
-        client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
-        resp = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-        )
-        if resp.choices:
+        model_list = await client.models.list()
+        active_ids = [
+            m.id for m in model_list.data 
+            if m.id and not any(k in m.id.lower() for k in ["whisper", "guard", "orpheus", "safeguard", "embed"])
+        ]
+        if active_ids:
+            models_to_try = active_ids + models_to_try
+    except Exception as list_err:
+        err_str = str(list_err)
+        if "401" in err_str or "invalid" in err_str.lower():
             return ProviderValidationStatus(
-                status="valid",
-                message="Connected successfully to Groq Cloud (LPU accelerated).",
-                model_tested="llama-3.3-70b-versatile",
+                status="invalid",
+                message=f"Groq authentication failed: {err_str}",
+                model_tested="openai/gpt-oss-120b",
             )
-        return ProviderValidationStatus(
-            status="invalid",
-            message="No choices returned from Groq API.",
-            model_tested="llama-3.3-70b-versatile",
-        )
-    except Exception as e:
-        return ProviderValidationStatus(
-            status="invalid",
-            message=f"Groq connection failed: {str(e)}",
-            model_tested="llama-3.3-70b-versatile",
-        )
+
+    last_err = ""
+    for model_name in models_to_try:
+        try:
+            resp = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+            )
+            if resp.choices:
+                return ProviderValidationStatus(
+                    status="valid",
+                    message=f"Connected successfully to Groq Cloud ({model_name} on LPUs).",
+                    model_tested=model_name,
+                )
+        except Exception as e:
+            err_str = str(e)
+            last_err = err_str
+            if "model_not_found" in err_str or "404" in err_str:
+                continue
+            # Try next model
+            continue
+
+    return ProviderValidationStatus(
+        status="invalid",
+        message=f"Groq connection failed: {last_err or 'No accessible models for this Groq key.'}",
+        model_tested="openai/gpt-oss-120b",
+    )
 
 
 async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationStatus:
@@ -288,32 +535,45 @@ async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationS
         return ProviderValidationStatus(
             status="unconfigured",
             message="No OpenRouter API Key provided.",
-            model_tested="meta-llama/llama-3.1-8b-instruct:free",
+            model_tested="meta-llama/llama-3.1-8b-instruct",
         )
-    try:
-        client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
-        resp = await client.chat.completions.create(
-            model="meta-llama/llama-3.1-8b-instruct:free",
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-        )
-        if resp.choices:
-            return ProviderValidationStatus(
-                status="valid",
-                message="Connected successfully to OpenRouter Free Pool.",
-                model_tested="meta-llama/llama-3.1-8b-instruct:free",
+    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+    models_to_try = [
+        "meta-llama/llama-3.1-8b-instruct",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+    ]
+
+    last_err = ""
+    for model_name in models_to_try:
+        try:
+            resp = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
             )
-        return ProviderValidationStatus(
-            status="invalid",
-            message="No choices returned from OpenRouter API.",
-            model_tested="meta-llama/llama-3.1-8b-instruct:free",
-        )
-    except Exception as e:
-        return ProviderValidationStatus(
-            status="invalid",
-            message=f"OpenRouter connection failed: {str(e)}",
-            model_tested="meta-llama/llama-3.1-8b-instruct:free",
-        )
+            if resp.choices:
+                return ProviderValidationStatus(
+                    status="valid",
+                    message=f"Connected successfully to OpenRouter ({model_name}).",
+                    model_tested=model_name,
+                )
+        except Exception as e:
+            err_str = str(e)
+            last_err = err_str
+            if "404" in err_str or "unavailable for free" in err_str:
+                continue
+            return ProviderValidationStatus(
+                status="invalid",
+                message=f"OpenRouter connection failed: {err_str}",
+                model_tested=model_name,
+            )
+    return ProviderValidationStatus(
+        status="invalid",
+        message=f"OpenRouter connection failed: {last_err or 'No accessible OpenRouter models found.'}",
+        model_tested="meta-llama/llama-3.1-8b-instruct",
+    )
 
 
 async def validate_google_cse_keys(

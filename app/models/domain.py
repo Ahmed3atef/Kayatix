@@ -3,6 +3,11 @@ from datetime import datetime, timezone
 from app.core.database import Base
 
 
+def utc_now() -> datetime:
+    """Returns naive UTC timestamp compatible with both asyncpg PostgreSQL and SQLite."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class EvaluationCache(Base):
     __tablename__ = "evaluation_cache"
 
@@ -13,7 +18,7 @@ class EvaluationCache(Base):
     match_score = Column(Integer, nullable=False)
     provider_used = Column(String(100), nullable=False)
     evaluation_json = Column(JSON, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now)
 
 
 class Job(Base):
@@ -24,7 +29,7 @@ class Job(Base):
     description = Column(Text, nullable=False)
     required_skills = Column(JSON, nullable=True)
     location = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now)
 
 
 class Candidate(Base):
@@ -37,7 +42,7 @@ class Candidate(Base):
     linkedin_url = Column(String(512), nullable=True)
     parsed_skills = Column(JSON, nullable=True)
     years_experience = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now)
 
 
 class UserSettings(Base):
@@ -52,10 +57,17 @@ class UserSettings(Base):
     google_cse_api_key = Column(String(255), nullable=True)
     google_cse_cx_id = Column(String(255), nullable=True)
     subscription_tier = Column(String(50), default="standard")  # "standard", "pro", "enterprise"
-    evaluation_mode = Column(String(50), default="hybrid")  # "hybrid", "llm_cascade", "local_offline"
+    evaluation_mode = Column(String(50), default="llm_cascade")
     rate_limit_rpm = Column(Integer, default=15)
+    database_url = Column(String(1024), nullable=True)
     env_content = Column(Text, nullable=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    @property
+    def database_type(self) -> str:
+        if self.database_url and ("postgres" in self.database_url.lower()):
+            return "postgresql"
+        return "sqlite"
 
 
 class JobTemplate(Base):
@@ -65,7 +77,7 @@ class JobTemplate(Base):
     title = Column(String(255), nullable=False, index=True)
     category = Column(String(100), default="General", index=True)
     description = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 

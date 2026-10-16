@@ -50,8 +50,10 @@ class UserSettingsResponse(BaseModel):
     google_cse_api_key_configured: bool
     google_cse_cx_id_configured: bool
     subscription_tier: str = "standard"
-    evaluation_mode: str = "hybrid"
+    evaluation_mode: str = "llm_cascade"
     rate_limit_rpm: int = 15
+    database_url: Optional[str] = None
+    database_type: str = "sqlite"
     env_content: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -65,7 +67,21 @@ class UserSettingsUpdateRequest(BaseModel):
     subscription_tier: Optional[str] = None
     evaluation_mode: Optional[str] = None
     rate_limit_rpm: Optional[int] = None
+    database_url: Optional[str] = None
     env_content: Optional[str] = None
+
+
+class DatabaseValidationRequest(BaseModel):
+    database_url: str
+
+
+class DatabaseValidationResponse(BaseModel):
+    status: str  # "valid", "invalid"
+    message: str
+    database_type: str  # "sqlite", "postgresql"
+    normalized_url: Optional[str] = None
+    latency_ms: Optional[float] = None
+    tables_found: List[str] = []
 
 
 
