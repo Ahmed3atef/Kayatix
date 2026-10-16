@@ -38,7 +38,7 @@
             <div class="card-body p-4" id="validationDetailsBody"></div>
         </div>
 
-        <!-- Settings Tabs: UI Form vs Raw .env Editor -->
+        <!-- Settings Tabs: Guided Account Form & JD Templates -->
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
             <div class="card-header border-bottom pt-3 pb-0 px-4">
                 <ul class="nav nav-tabs card-header-tabs" id="settingsModeTabs" role="tablist">
@@ -51,12 +51,6 @@
                     <li class="nav-item" role="presentation">
                         <button class="nav-link fw-semibold" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates-pane" type="button" role="tab">
                             <i class="bi bi-file-earmark-text text-success me-1"></i> JD Templates
-                        </button>
-                    </li>
-
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-semibold" id="env-tab" data-bs-toggle="tab" data-bs-target="#env-pane" type="button" role="tab">
-                            <i class="bi bi-database text-secondary me-1"></i> Raw Config Editor (Database)
                         </button>
                     </li>
                 </ul>
@@ -298,30 +292,6 @@
                         </div>
                     </div>
 
-                    <!-- TAB 3: RAW CONFIG EDITOR -->
-                    <div class="tab-pane fade" id="env-pane" role="tabpanel">
-                        <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="fw-bold small text-body-emphasis"><i class="bi bi-terminal me-1"></i> Database Configuration Overview</span>
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Database Stored</span>
-                            </div>
-                            <textarea class="form-control font-monospace small" id="rawEnvEditor" rows="16" placeholder="# Key=Value pairs stored in database...">{{ settings.env_content or '' }}</textarea>
-                            <div class="form-text mt-2">
-                                Editing here directly updates your active database configuration table.
-                            </div>
-                        </div>
-
-                        <div class="d-flex justify-content-between align-items-center">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyToClipboard(document.getElementById('rawEnvEditor').value, 'Configuration copied!')">
-                                <i class="bi bi-clipboard"></i> Copy Config
-                            </button>
-                            <button type="button" class="btn btn-primary px-4 py-2 fw-semibold d-flex align-items-center gap-2" id="saveRawEnvBtn">
-                                <i class="bi bi-save"></i>
-                                <span>Save Config to Database</span>
-                            </button>
-                        </div>
-                    </div>
-
                 </div>
         </div>
 
@@ -428,9 +398,7 @@
             googleCseKey: document.getElementById('googleCseKey')?.value ?? '',
             evaluationMode: document.getElementById('evaluationMode')?.value ?? '',
             subscriptionTier: document.getElementById('subscriptionTier')?.value ?? '',
-            rateLimitRpm: document.getElementById('rateLimitRpm')?.value ?? '',
-            databaseUrl: document.getElementById('databaseUrlInput')?.value?.trim() ?? '',
-            rawEnvEditor: document.getElementById('rawEnvEditor')?.value ?? ''
+            rateLimitRpm: document.getElementById('rateLimitRpm')?.value ?? ''
         };
     }
 
@@ -454,10 +422,10 @@
         setSyncStatus(!isModified);
     }
 
-    // Attach listeners to all inputs in settingsForm and rawEnvEditor
+    // Attach listeners to all inputs in settingsForm
     const monitoredFields = [
         'geminiKey', 'groqKey', 'openrouterKey', 'googleCseCx', 
-        'googleCseKey', 'evaluationMode', 'subscriptionTier', 'rateLimitRpm', 'databaseUrlInput', 'rawEnvEditor'
+        'googleCseKey', 'evaluationMode', 'subscriptionTier', 'rateLimitRpm'
     ];
 
     monitoredFields.forEach(id => {
@@ -505,47 +473,17 @@
                 const errData = await resp.json().catch(() => ({}));
                 throw new Error(errData.detail || `HTTP ${resp.status}`);
             }
-            const data = await resp.json();
-            if (data.env_content) {
-                document.getElementById('rawEnvEditor').value = data.env_content;
-            }
             initialSettingsSnapshot = getSettingsSnapshot();
             setSyncStatus(true);
             showToast('Settings saved to database and synchronized successfully!', 'success');
+            if (typeof syncFooterProviderStatus === 'function') {
+                syncFooterProviderStatus();
+            }
         } catch (err) {
             showToast('Failed to save settings: ' + err.message, 'danger');
         } finally {
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<i class="bi bi-check2-circle"></i> <span>Save to Database</span>';
-        }
-    });
-
-    // Save Raw .env file directly to Database
-    document.getElementById('saveRawEnvBtn').addEventListener('click', async () => {
-        const btn = document.getElementById('saveRawEnvBtn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving .env...';
-
-        const content = document.getElementById('rawEnvEditor').value;
-
-        try {
-            const resp = await fetch('/api/v1/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ env_content: content })
-            });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            initialSettingsSnapshot = getSettingsSnapshot();
-            setSyncStatus(true);
-            showToast('Configuration saved to database and synchronized successfully!', 'success');
-            if (typeof syncFooterProviderStatus === 'function') {
-                syncFooterProviderStatus();
-            }
-        } catch (err) {
-            showToast('Failed to update config: ' + err.message, 'danger');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-save"></i> <span>Save Config to Database</span>';
         }
     });
 

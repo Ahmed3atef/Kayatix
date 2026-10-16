@@ -366,14 +366,12 @@ function updateFooterBadge(elementId, status, providerLabel) {
 }
 
 async function syncFooterProviderStatus() {
-    // 1. Read cached status from localStorage if present
+    // 1. Read cached validation status from localStorage if present
+    let localStatus = {};
     try {
         const cachedStr = localStorage.getItem('kayatix_ai_status');
         if (cachedStr) {
-            const cached = JSON.parse(cachedStr);
-            if (cached.gemini) updateFooterBadge('footerBadgeGemini', cached.gemini, 'Priority 1: Gemini 2.5 Flash');
-            if (cached.groq) updateFooterBadge('footerBadgeGroq', cached.groq, 'Priority 2: Groq Llama 3.3 70B');
-            if (cached.openrouter) updateFooterBadge('footerBadgeOpenRouter', cached.openrouter, 'Priority 3: OpenRouter Fallback');
+            localStatus = JSON.parse(cachedStr);
         }
     } catch (_) {}
 
@@ -382,31 +380,32 @@ async function syncFooterProviderStatus() {
         const res = await fetch('/api/v1/settings');
         if (res.ok) {
             const settings = await res.json();
-            const cached = JSON.parse(localStorage.getItem('kayatix_ai_status') || '{}');
+            const health = settings.provider_health || {};
 
-            if (cached.gemini !== 'invalid') {
-                updateFooterBadge(
-                    'footerBadgeGemini',
-                    settings.gemini_api_key_configured ? 'valid' : 'unconfigured',
-                    'Priority 1: Gemini 2.5 Flash'
-                );
-            }
-            if (cached.groq !== 'invalid') {
-                updateFooterBadge(
-                    'footerBadgeGroq',
-                    settings.groq_api_key_configured ? 'valid' : 'unconfigured',
-                    'Priority 2: Groq Llama 3.3 70B'
-                );
-            }
-            if (cached.openrouter !== 'invalid') {
-                updateFooterBadge(
-                    'footerBadgeOpenRouter',
-                    settings.openrouter_api_key_configured ? 'valid' : 'unconfigured',
-                    'Priority 3: OpenRouter Fallback'
-                );
-            }
+            // If a key is NOT configured in DB/settings, it is strictly unconfigured
+            const geminiStatus = !settings.gemini_api_key_configured
+                ? 'unconfigured'
+                : (localStatus.gemini || health.gemini || 'unconfigured');
+
+            const groqStatus = !settings.groq_api_key_configured
+                ? 'unconfigured'
+                : (localStatus.groq || health.groq || 'unconfigured');
+
+            const openrouterStatus = !settings.openrouter_api_key_configured
+                ? 'unconfigured'
+                : (localStatus.openrouter || health.openrouter || 'unconfigured');
+
+            updateFooterBadge('footerBadgeGemini', geminiStatus, 'Priority 1: Gemini 2.5 Flash');
+            updateFooterBadge('footerBadgeGroq', groqStatus, 'Priority 2: Groq Llama 3.3 70B');
+            updateFooterBadge('footerBadgeOpenRouter', openrouterStatus, 'Priority 3: OpenRouter Fallback');
+            return;
         }
     } catch (_) {}
+
+    // Fallback to localStatus if API was unreachable
+    if (localStatus.gemini) updateFooterBadge('footerBadgeGemini', localStatus.gemini, 'Priority 1: Gemini 2.5 Flash');
+    if (localStatus.groq) updateFooterBadge('footerBadgeGroq', localStatus.groq, 'Priority 2: Groq Llama 3.3 70B');
+    if (localStatus.openrouter) updateFooterBadge('footerBadgeOpenRouter', localStatus.openrouter, 'Priority 3: OpenRouter Fallback');
 }
 
 window.updateFooterBadge = updateFooterBadge;

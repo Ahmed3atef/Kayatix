@@ -168,7 +168,7 @@ async def test_validate_database_api_endpoint(client):
 
 @pytest.mark.asyncio
 async def test_settings_page_renders_cleanly_without_database_switcher(client):
-    """Verifies that the Settings UI does not expose database switcher controls."""
+    """Verifies that the Settings UI does not expose database switcher or raw env config controls."""
     resp = await client.get("/settings")
     assert resp.status_code == 200
     html = resp.text
@@ -177,6 +177,12 @@ async def test_settings_page_renders_cleanly_without_database_switcher(client):
     assert "id=\"dbChoiceSqlite\"" not in html
     assert "id=\"dbChoicePostgres\"" not in html
     assert "Reset to Default SQLite" not in html
+    # Raw Config Editor must be completely removed for security
+    assert "Raw Config Editor" not in html
+    assert "id=\"rawEnvEditor\"" not in html
+    assert "id=\"saveRawEnvBtn\"" not in html
+    assert "id=\"env-tab\"" not in html
+    assert "id=\"env-pane\"" not in html
     # Ensure primary settings sections remain intact
     assert "Multi-Provider AI Credentials" in html
     assert "Google Custom Search" in html
@@ -185,7 +191,7 @@ async def test_settings_page_renders_cleanly_without_database_switcher(client):
 
 @pytest.mark.asyncio
 async def test_database_url_managed_via_server_not_user_settings(db_session):
-    """Verifies that user settings cannot arbitrarily switch server database engine."""
+    """Verifies that user settings cannot arbitrarily switch server database engine and masks credentials."""
     from app.core.database import mask_database_url
 
     # Updating settings only affects credentials and configuration
@@ -203,6 +209,40 @@ async def test_database_url_managed_via_server_not_user_settings(db_session):
     assert "secret_password_123" not in masked
     assert "••••••••" in masked
     assert "admin_user" in masked
+
+    # Verify API response never leaks raw password or raw .env
+    assert "secret_password_123" not in (res.database_url or "")
+    assert res.env_content is None
+
+
+def test_resolve_database_url_hierarchy(tmp_path, monkeypatch):
+    """
+    Verifies strict DATABASE_URL resolution order:
+    1. Read from .env file if it exists and defines DATABASE_URL
+    2. If not in .env, read from system environment variables (os.environ)
+    3. If neither is set, fall back to default SQLite database file
+    """
+    from app.core.config import resolve_database_url, DEFAULT_SQLITE_URL
+
+    test_env_file = tmp_path / ".env"
+
+    # Case 1: .env file defines DATABASE_URL -> takes highest priority
+    test_env_file.write_text('DATABASE_URL="postgresql://env_user:env_pass@host:5432/env_db"\n')
+    monkeypatch.setenv("DATABASE_URL", "postgresql://sys_user:sys_pass@host:5432/sys_db")
+    resolved = resolve_database_url(str(test_env_file))
+    assert resolved == "postgresql://env_user:env_pass@host:5432/env_db"
+
+    # Case 2: .env does not define DATABASE_URL -> falls back to system environment variable
+    test_env_file.write_text('PROJECT_NAME="Test"\n')
+    monkeypatch.setenv("DATABASE_URL", "postgresql://sys_user:sys_pass@host:5432/sys_db")
+    resolved = resolve_database_url(str(test_env_file))
+    assert resolved == "postgresql://sys_user:sys_pass@host:5432/sys_db"
+
+    # Case 3: Neither defines DATABASE_URL -> falls back to default SQLite
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    resolved = resolve_database_url(str(test_env_file))
+    assert resolved == DEFAULT_SQLITE_URL
+
 
 
 @pytest.mark.asyncio

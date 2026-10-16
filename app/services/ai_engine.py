@@ -12,19 +12,166 @@ from app.schemas.payloads import CandidateEvaluationResult, InterviewQuestionSch
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_INSTRUCTION = """You are an elite, unbiased Principal Technical Recruiter and Engineering Manager.
-Analyze the provided Candidate Profile (Resume, CV, or Portfolio Website) against the target Job Description.
+SYSTEM_INSTRUCTION = """You are a calibrated Principal Technical Bar Raiser and Engineering Director conducting a rigorous, evidence-anchored candidate evaluation.
+You evaluate the candidate profile using Retrieval-Augmented Generation (RAG) evidence segments extracted from their resume/portfolio against the target Job Description.
 
-STRICT EVALUATION RULES:
-1. Base all scores and skill matches strictly on evidence present in the text. Do not hallucinate skills.
-2. Accurately understand requirement logic:
-   - When a job description specifies alternatives (e.g., 'FastAPI or Django', 'TailwindCSS or Bootstrap'), satisfying either alternative meets the requirement.
-   - Separate core required competencies from optional/nice-to-have items.
-3. Calculate an accurate match_percentage (0 to 100) reflecting genuine role alignment, taking into account required skills, relevant experience tenure, and project accomplishments.
-4. Accurately estimate professional years of experience (estimated_years_experience) from work history dates.
-5. Identify timeline gaps, job-hopping, or unverified claims under 'red_flags_and_gaps'.
-6. Formulate 5 to 7 high-impact, role-tailored interview questions directly testing missing requirements, suspicious claims, and situational technical competence.
-7. Return ONLY a valid JSON object matching the exact schema requested.
+EVALUATION METHODOLOGY & CHAIN-OF-THOUGHT (CoT):
+1. IDENTITY & CONTACT EXTRACTION:
+   - Extract the candidate's real legal full name from the top header or contact details. Avoid generic labels like 'Candidate Profile' whenever a name is present.
+
+2. TENURE & CHRONOLOGICAL AUDIT:
+   - Accurately calculate 'estimated_years_experience' based SOLELY on commercial software engineering roles.
+   - Distinctly differentiate technical engineering tenure from unrelated employment (e.g., retail, sales, non-technical support). Do not count non-technical roles toward engineering YOE.
+   - Scrutinize date ranges for timeline gaps > 6 months, future-dated claims, or rapid job-hopping (< 6 months per role).
+
+3. REQUIREMENT ALIGNMENT & BOOLEAN REASONING:
+   - When the JD specifies alternatives (e.g., 'FastAPI or Django', 'PostgreSQL or MySQL'), fulfilling either alternative fully satisfies the requirement.
+   - Separate non-negotiable core competencies from optional 'nice-to-have' preferences.
+   - Differentiate between passive keyword listings in a 'Skills' block vs active verified implementation in 'Projects' or 'Work Experience'.
+
+4. CALIBRATED SCORING RUBRIC (match_percentage: 0 to 100):
+   - 85 - 100%: Exceptional Fit. Exceeds mandatory requirements, matches expected seniority, demonstrates proven production scale.
+   - 70 - 84%: Strong Hireable Fit. Meets all core technical criteria with relevant tenure; minor gaps only in secondary tools.
+   - 50 - 69%: Moderate Fit / Development Opportunity. Strong foundational skills, but junior tenure applying for a senior role or lacks key architectural stack depth.
+   - 0 - 49%: Low Fit. Critical stack mismatch, severe experience deficit, or unverifiable claims.
+
+5. STRATEGIC INTERVIEW QUESTION GENERATION:
+   - Generate 5 to 7 concrete, high-signal questions across Technical, System Design, Behavioral, and Gap-Verification.
+   - Anchor questions in the candidate's actual projects (e.g., reference specific systems, databases, or trade-offs mentioned in their resume).
+   - Probe identified missing critical skills with direct implementation scenarios.
+
+OUTPUT MANDATE:
+- Return ONLY valid JSON adhering strictly to the requested response schema.
+- No conversational prelude, no markdown wrapping, no hallucinated competencies.
+"""
+
+
+# ==============================================================================
+# RETRIEVAL-AUGMENTED GENERATION (RAG) CONTEXT EXTRACTION & CHUNKING
+# ==============================================================================
+
+def segment_candidate_profile(raw_text: str) -> dict[str, str]:
+    """
+    RAG Stage 1 - Semantic Document Chunking:
+    Parses unstructured resume / portfolio text into categorized functional blocks:
+    - technical_skills: Programming languages, frameworks, DBs, cloud tools
+    - professional_experience: Roles, company tenures, chronological dates
+    - engineering_projects: Architected systems, metrics, repositories
+    - education_certifications: Academic credentials, courses, degrees
+    - candidate_summary: Bio, headline, contact info
+    """
+    sections: dict[str, list[str]] = {
+        "candidate_summary": [],
+        "technical_skills": [],
+        "professional_experience": [],
+        "engineering_projects": [],
+        "education_certifications": [],
+    }
+    current_section = "candidate_summary"
+
+    for line in raw_text.splitlines():
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+
+        clean_heading = re.sub(r"[^a-zA-Z\s]", "", trimmed).strip().upper()
+
+        if any(h == clean_heading or clean_heading.startswith(h) for h in [
+            "SKILLS", "TECHNICAL SKILLS", "TECH STACK", "CORE COMPETENCIES", "TECHNOLOGIES", "TOOLS"
+        ]):
+            current_section = "technical_skills"
+            continue
+        elif any(h == clean_heading or clean_heading.startswith(h) for h in [
+            "EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT HISTORY", "PROFESSIONAL EXPERIENCE", "CAREER HISTORY"
+        ]):
+            current_section = "professional_experience"
+            continue
+        elif any(h == clean_heading or clean_heading.startswith(h) for h in [
+            "PROJECTS", "KEY PROJECTS", "PERSONAL PROJECTS", "PORTFOLIO", "OPEN SOURCE", "SELECTED WORK"
+        ]):
+            current_section = "engineering_projects"
+            continue
+        elif any(h == clean_heading or clean_heading.startswith(h) for h in [
+            "EDUCATION", "ACADEMIC BACKGROUND", "CERTIFICATIONS", "COURSES", "TRAINING"
+        ]):
+            current_section = "education_certifications"
+            continue
+
+        sections[current_section].append(trimmed)
+
+    return {k: "\n".join(v) for k, v in sections.items()}
+
+
+def extract_jd_core_facets(jd_text: str) -> dict[str, str]:
+    """
+    RAG Stage 2 - Target Requirement Decomposition:
+    Extracts core competency facets from the target Job Description:
+    - Core technical stack requirements
+    - Seniority and experience expectations
+    - Architectural scale and responsibilities
+    """
+    must_haves: list[str] = []
+    nice_to_haves: list[str] = []
+    responsibilities: list[str] = []
+
+    current_facet = must_haves
+    for line in jd_text.splitlines():
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        lower_line = trimmed.lower()
+        if any(term in lower_line for term in ["nice to have", "plus", "preferred", "bonus", "optional"]):
+            current_facet = nice_to_haves
+        elif any(term in lower_line for term in ["responsibilit", "what you will do", "duties", "role overview"]):
+            current_facet = responsibilities
+        elif any(term in lower_line for term in ["requirement", "qualification", "must have", "must-have", "skills"]):
+            current_facet = must_haves
+
+        current_facet.append(trimmed)
+
+    return {
+        "core_requirements": "\n".join(must_haves) if must_haves else jd_text[:1200],
+        "nice_to_haves": "\n".join(nice_to_haves) if nice_to_haves else "Not explicitly differentiated; evaluate against core requirements.",
+        "responsibilities": "\n".join(responsibilities) if responsibilities else "General backend engineering delivery",
+    }
+
+
+def build_rag_augmented_prompt(candidate_text: str, job_description: str) -> str:
+    """
+    RAG Stage 3 - Augmented Generation Context Construction:
+    Combines semantic chunks, requirement facets, and provenance verification
+    into a calibrated, high-precision prompt.
+    """
+    segments = segment_candidate_profile(candidate_text)
+    jd_facets = extract_jd_core_facets(job_description)
+
+    return f"""### TARGET ROLE REQUIREMENTS & BENCHMARK
+[Core Mandatory Qualifications & Stack]:
+{jd_facets['core_requirements']}
+
+[Preferred / Secondary Skills]:
+{jd_facets['nice_to_haves']}
+
+[Role Scope & Responsibilities]:
+{jd_facets['responsibilities']}
+
+---
+### RAG RETRIEVED CANDIDATE EVIDENCE MATRIX
+[Candidate Skills & Tools Chunk]:
+{segments['technical_skills'] or 'Refer to full candidate profile below'}
+
+[Professional Experience & Tenures Chunk]:
+{segments['professional_experience'] or 'Refer to full candidate profile below'}
+
+[Key Projects & Engineering Artifacts Chunk]:
+{segments['engineering_projects'] or 'Refer to full candidate profile below'}
+
+[Education & Credentials Chunk]:
+{segments['education_certifications'] or 'Not provided'}
+
+---
+### FULL CANDIDATE VERBATIM PROVENANCE
+{candidate_text}
 """
 
 
@@ -175,10 +322,7 @@ async def evaluate_candidate_with_fallback(
     Executes full candidate evaluation across the multi-provider cascade:
     1. Gemini Flash -> 2. Groq Cloud (Fast LPUs) -> 3. OpenRouter Fallback
     """
-    user_prompt = (
-        f"=== TARGET JOB DESCRIPTION ===\n{job_description}\n\n"
-        f"=== CANDIDATE DATA (CV / PORTFOLIO) ===\n{candidate_text}"
-    )
+    user_prompt = build_rag_augmented_prompt(candidate_text, job_description)
 
     # 1. Try Primary: Gemini
     try:

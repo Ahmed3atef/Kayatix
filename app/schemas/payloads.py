@@ -57,6 +57,7 @@ class UserSettingsResponse(BaseModel):
     database_type: str = "postgresql"
     env_content: Optional[str] = None
     updated_at: Optional[str] = None
+    provider_health: dict[str, str] = Field(default_factory=dict)
 
 
 class UserSettingsUpdateRequest(BaseModel):

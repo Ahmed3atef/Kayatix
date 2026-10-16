@@ -5,6 +5,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, s
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import HttpUrl
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.domain import EvaluationCache
 from app.schemas.payloads import EvaluationAPIResponse, CandidateEvaluationResult
@@ -29,6 +30,7 @@ async def _process_and_cache_evaluation(
     job_description: str,
     source_type: str,
     db: AsyncSession,
+    force_refresh: bool = False,
 ) -> EvaluationAPIResponse:
     req_hash = compute_request_hash(candidate_text, job_description)
 
@@ -37,12 +39,26 @@ async def _process_and_cache_evaluation(
     result = await db.execute(stmt)
     cached_record = result.scalar_one_or_none()
 
-    if cached_record:
-        # Check if cache entry was created by old local/hybrid engine
-        if any(term in (cached_record.provider_used or "").lower() for term in ["local", "hybrid"]):
+    if cached_record and not force_refresh:
+        cached_provider = (cached_record.provider_used or "").lower()
+        provider_still_active = False
+
+        if "gemini" in cached_provider or "google" in cached_provider:
+            provider_still_active = bool(settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip())
+        elif "groq" in cached_provider:
+            provider_still_active = bool(settings.GROQ_API_KEY and settings.GROQ_API_KEY.strip())
+        elif "openrouter" in cached_provider:
+            provider_still_active = bool(settings.OPENROUTER_API_KEY and settings.OPENROUTER_API_KEY.strip())
+
+        # If cache entry was created by legacy or unconfigured engine, invalidate it
+        if any(term in cached_provider for term in ["local", "hybrid"]):
             logger.info(
-                f"[AI Evaluator] Cache entry {req_hash[:8]} has legacy provider '{cached_record.provider_used}'. "
-                "Invalidating to perform genuine real AI model evaluation."
+                f"[AI Evaluator] Cache entry {req_hash[:8]} has legacy provider '{cached_record.provider_used}'. Invalidate."
+            )
+        elif not provider_still_active:
+            logger.info(
+                f"[AI Evaluator] Cache entry {req_hash[:8]} was created by '{cached_record.provider_used}', "
+                f"which is currently NOT configured. Re-evaluating with active LLM cascade..."
             )
         else:
             logger.info(f"[AI Evaluator] Cache hit for request {req_hash[:8]} (Provider: {cached_record.provider_used}).")
@@ -93,6 +109,7 @@ async def _process_and_cache_evaluation(
 async def evaluate_pdf_resume(
     job_description: str = Form(..., description="Target Job Description text"),
     resume_file: UploadFile = File(..., description="Candidate CV or LinkedIn Export PDF"),
+    force_refresh: bool = Form(False, description="Bypass cache and force fresh AI evaluation"),
     db: AsyncSession = Depends(get_db),
 ):
     if not resume_file.filename or not resume_file.filename.lower().endswith(".pdf"):
@@ -106,7 +123,7 @@ async def evaluate_pdf_resume(
         pdf_bytes = await resume_file.read()
         clean_text = extract_clean_pdf_text(pdf_bytes)
         logger.info(f"[PDF Evaluation] Clean text successfully parsed ({len(clean_text)} chars). Dispatching to AI engine.")
-        return await _process_and_cache_evaluation(clean_text, job_description, "pdf_resume", db)
+        return await _process_and_cache_evaluation(clean_text, job_description, "pdf_resume", db, force_refresh=force_refresh)
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -139,6 +156,7 @@ async def evaluate_candidate_website(
     job_description: str = Form(..., description="Target Job Description text"),
     portfolio_url: Optional[str] = Form(None, description="Candidate personal website, blog, or GitHub URL"),
     portfolio_text: Optional[str] = Form(None, description="Directly pasted portfolio bio or text (optional fallback for SPAs)"),
+    force_refresh: bool = Form(False, description="Bypass cache and force fresh AI evaluation"),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -174,7 +192,7 @@ async def evaluate_candidate_website(
         else:
             raise ValueError("Please provide a candidate Portfolio URL or paste portfolio text directly.")
 
-        return await _process_and_cache_evaluation(website_text, job_description, "portfolio_site", db)
+        return await _process_and_cache_evaluation(website_text, job_description, "portfolio_site", db, force_refresh=force_refresh)
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

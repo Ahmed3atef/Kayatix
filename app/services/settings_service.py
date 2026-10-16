@@ -201,30 +201,49 @@ async def get_or_create_user_settings(db: AsyncSession) -> UserSettings:
     return user_settings
 
 
+provider_health_cache: dict[str, str] = {
+    "gemini": "unconfigured",
+    "groq": "unconfigured",
+    "openrouter": "unconfigured",
+}
+
+
+def get_current_provider_health(record) -> dict[str, str]:
+    health = dict(provider_health_cache)
+    if not record.gemini_api_key or not record.gemini_api_key.strip():
+        health["gemini"] = "unconfigured"
+    if not record.groq_api_key or not record.groq_api_key.strip():
+        health["groq"] = "unconfigured"
+    if not record.openrouter_api_key or not record.openrouter_api_key.strip():
+        health["openrouter"] = "unconfigured"
+    return health
+
+
 async def get_settings_summary(db: AsyncSession) -> UserSettingsResponse:
-    """Returns configuration overview, secret status, and raw configuration representation with masked credentials."""
+    """Returns configuration overview, secret status, and safe configuration with masked credentials."""
     from app.core.database import mask_database_url
     record = await get_or_create_user_settings(db)
-    env_str = record.env_content or generate_config_text(record)
     active_db = record.database_url or settings.DATABASE_URL or ""
     db_type = "postgresql" if "postgres" in active_db.lower() else "sqlite"
+    masked_db = mask_database_url(active_db)
 
     return UserSettingsResponse(
         project_name=record.project_name or DEFAULT_PROJECT_NAME,
         version=record.version or DEFAULT_VERSION,
-        gemini_api_key_configured=bool(record.gemini_api_key),
-        groq_api_key_configured=bool(record.groq_api_key),
-        openrouter_api_key_configured=bool(record.openrouter_api_key),
-        google_cse_api_key_configured=bool(record.google_cse_api_key),
-        google_cse_cx_id_configured=bool(record.google_cse_cx_id),
+        gemini_api_key_configured=bool(record.gemini_api_key and record.gemini_api_key.strip()),
+        groq_api_key_configured=bool(record.groq_api_key and record.groq_api_key.strip()),
+        openrouter_api_key_configured=bool(record.openrouter_api_key and record.openrouter_api_key.strip()),
+        google_cse_api_key_configured=bool(record.google_cse_api_key and record.google_cse_api_key.strip()),
+        google_cse_cx_id_configured=bool(record.google_cse_cx_id and record.google_cse_cx_id.strip()),
         subscription_tier=record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER,
         evaluation_mode=record.evaluation_mode or DEFAULT_EVALUATION_MODE,
         rate_limit_rpm=record.rate_limit_rpm or DEFAULT_RATE_LIMIT_RPM,
-        database_url=active_db,
-        masked_database_url=mask_database_url(active_db),
+        database_url=masked_db,
+        masked_database_url=masked_db,
         database_type=db_type,
-        env_content=env_str,
+        env_content=None,
         updated_at=record.updated_at.isoformat() if record.updated_at else None,
+        provider_health=get_current_provider_health(record),
     )
 
 
@@ -298,6 +317,23 @@ async def update_user_settings(
     await db.commit()
     await db.refresh(record)
 
+    # Immediately refresh health status for configured provider keys
+    if record.groq_api_key and provider_health_cache.get("groq") != "valid":
+        try:
+            await validate_groq_key(record.groq_api_key)
+        except Exception:
+            pass
+    if record.gemini_api_key and provider_health_cache.get("gemini") != "valid":
+        try:
+            await validate_gemini_key(record.gemini_api_key)
+        except Exception:
+            pass
+    if record.openrouter_api_key and provider_health_cache.get("openrouter") != "valid":
+        try:
+            await validate_openrouter_key(record.openrouter_api_key)
+        except Exception:
+            pass
+
     return await get_settings_summary(db)
 
 
@@ -369,13 +405,16 @@ async def validate_database_connection(raw_url: Optional[str] = None) -> Databas
 
 
 async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatus:
-    if not api_key:
-        return ProviderValidationStatus(
+    if not api_key or not api_key.strip():
+        status = ProviderValidationStatus(
             status="unconfigured",
             message="No Gemini API Key provided.",
             model_tested="gemini-3.8-flash",
         )
-    client = genai.Client(api_key=api_key)
+        provider_health_cache["gemini"] = "unconfigured"
+        return status
+    clean_key = api_key.strip()
+    client = genai.Client(api_key=clean_key)
     
     preferred_models = [
         "gemini-3.8-flash",
@@ -423,6 +462,7 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
                 contents="ping",
             )
             if resp and resp.text:
+                provider_health_cache["gemini"] = "valid"
                 return ProviderValidationStatus(
                     status="valid",
                     message=f"Connected successfully to Gemini API ({model_name}).",
@@ -433,6 +473,7 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
             last_err = err_msg
             err_lower = err_msg.lower()
             if any(k in err_lower for k in ["api_key_invalid", "api key not valid", "permission_denied", "consumer_invalid", "consumer_suspended", "unauthenticated", "401"]):
+                provider_health_cache["gemini"] = "invalid"
                 return ProviderValidationStatus(
                     status="invalid",
                     message=f"Gemini API key is invalid: {err_msg}",
@@ -445,12 +486,14 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
 
     if had_high_demand:
         # Key is authenticated and valid, but Google is experiencing high traffic
+        provider_health_cache["gemini"] = "valid"
         return ProviderValidationStatus(
             status="valid",
             message="Gemini key authenticated successfully. (Note: Google servers currently report high demand spikes; Groq cascade is ready as active fallback).",
             model_tested=deduped_models[0] if deduped_models else "gemini-3.8-flash",
         )
 
+    provider_health_cache["gemini"] = "invalid"
     return ProviderValidationStatus(
         status="invalid",
         message=f"Gemini connection failed: {last_err or 'No accessible Gemini models found for this key.'}",
@@ -459,13 +502,15 @@ async def validate_gemini_key(api_key: Optional[str]) -> ProviderValidationStatu
 
 
 async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
-    if not api_key:
+    if not api_key or not api_key.strip():
+        provider_health_cache["groq"] = "unconfigured"
         return ProviderValidationStatus(
             status="unconfigured",
             message="No Groq API Key provided.",
             model_tested="openai/gpt-oss-120b",
         )
-    client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
+    clean_key = api_key.strip()
+    client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=clean_key)
 
     models_to_try = [
         "openai/gpt-oss-120b",
@@ -486,6 +531,7 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
     except Exception as list_err:
         err_str = str(list_err)
         if "401" in err_str or "invalid" in err_str.lower():
+            provider_health_cache["groq"] = "invalid"
             return ProviderValidationStatus(
                 status="invalid",
                 message=f"Groq authentication failed: {err_str}",
@@ -501,6 +547,7 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
                 max_tokens=1,
             )
             if resp.choices:
+                provider_health_cache["groq"] = "valid"
                 return ProviderValidationStatus(
                     status="valid",
                     message=f"Connected successfully to Groq Cloud ({model_name} on LPUs).",
@@ -514,6 +561,7 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
             # Try next model
             continue
 
+    provider_health_cache["groq"] = "invalid"
     return ProviderValidationStatus(
         status="invalid",
         message=f"Groq connection failed: {last_err or 'No accessible models for this Groq key.'}",
@@ -522,13 +570,15 @@ async def validate_groq_key(api_key: Optional[str]) -> ProviderValidationStatus:
 
 
 async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationStatus:
-    if not api_key:
+    if not api_key or not api_key.strip():
+        provider_health_cache["openrouter"] = "unconfigured"
         return ProviderValidationStatus(
             status="unconfigured",
             message="No OpenRouter API Key provided.",
             model_tested="meta-llama/llama-3.1-8b-instruct",
         )
-    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+    clean_key = api_key.strip()
+    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=clean_key)
     models_to_try = [
         "meta-llama/llama-3.1-8b-instruct",
         "meta-llama/llama-3.3-70b-instruct:free",
@@ -545,6 +595,7 @@ async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationS
                 max_tokens=1,
             )
             if resp.choices:
+                provider_health_cache["openrouter"] = "valid"
                 return ProviderValidationStatus(
                     status="valid",
                     message=f"Connected successfully to OpenRouter ({model_name}).",
@@ -555,11 +606,13 @@ async def validate_openrouter_key(api_key: Optional[str]) -> ProviderValidationS
             last_err = err_str
             if "404" in err_str or "unavailable for free" in err_str:
                 continue
+            provider_health_cache["openrouter"] = "invalid"
             return ProviderValidationStatus(
                 status="invalid",
                 message=f"OpenRouter connection failed: {err_str}",
                 model_tested=model_name,
             )
+    provider_health_cache["openrouter"] = "invalid"
     return ProviderValidationStatus(
         status="invalid",
         message=f"OpenRouter connection failed: {last_err or 'No accessible OpenRouter models found.'}",
@@ -601,6 +654,10 @@ async def validate_all_settings(
     groq_status = await validate_groq_key(groq_key)
     openrouter_status = await validate_openrouter_key(openrouter_key)
     cse_status = await validate_google_cse_keys(cse_key, cse_cx)
+
+    provider_health_cache["gemini"] = gemini_status.status
+    provider_health_cache["groq"] = groq_status.status
+    provider_health_cache["openrouter"] = openrouter_status.status
 
     overall_ready = any(
         s.status == "valid" for s in [gemini_status, groq_status, openrouter_status]

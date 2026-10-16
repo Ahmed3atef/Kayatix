@@ -86,7 +86,7 @@ async def test_settings_evaluation_mode_persistence_and_sync(db_session):
 
     assert summary.evaluation_mode == "llm_cascade"
     assert settings.EVALUATION_MODE == "llm_cascade"
-    assert 'EVALUATION_MODE="llm_cascade"' in summary.env_content
+    assert summary.env_content is None  # Never exposed to client API responses
 
     # Retrieve settings summary to verify persistence
     persisted_summary = await get_settings_summary(db_session)

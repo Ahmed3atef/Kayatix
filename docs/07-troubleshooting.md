@@ -4,21 +4,20 @@ A guide to diagnosing and solving common issues when running Kayatix.
 
 ---
 
-## 1. Google Custom Search: `API_KEY_SERVICE_BLOCKED`
+## 1. Google Custom Search: `403 Forbidden / Project Does Not Have Access`
 
 ### Symptoms:
 ```text
-Requests to Custom Search are blocked (API_KEY_SERVICE_BLOCKED / PERMISSION_DENIED)
+Google Search API error (HTTP 403): This project does not have the access to Custom Search JSON API.
 ```
 
 ### Cause:
-The Google Cloud API key has API restrictions enabled that do not include the Custom Search API, or the Custom Search API is not activated on the GCP project.
+Google Cloud restricted programmatic access to the legacy Custom Search JSON API for all new Google Cloud projects. Automated in-app raw JSON calls are blocked even if enabled in the Google Cloud Console.
 
 ### Solution:
-1. Open the [Google Cloud API Library](https://console.cloud.google.com/apis/library/customsearch.googleapis.com) and click **Enable**.
-2. Open [Google Cloud Credentials](https://console.cloud.google.com/apis/credentials), edit your API Key, and either select **"Don't restrict key"** or add **Custom Search API** to the allowed list.
-3. Save and wait 1–3 minutes for changes to propagate.
-4. *Alternative*: Use the **1-Click Direct Google Search** button on `/sourcing` to search immediately without an API key.
+Kayatix provides two official, 100% free, unlimited zero-key alternatives:
+1. **Embedded Google Programmable Search Widget**: Uses only your free Search Engine ID (`cx`). Renders directly inside Kayatix with zero Google Cloud API keys or billing required.
+2. **1-Click Direct Google Sourcing**: Click **"Open 1-Click Search on Google (0 Setup)"** on `/sourcing` to search directly on Google with the pre-compiled Boolean dork string. Zero configuration required.
 
 ---
 

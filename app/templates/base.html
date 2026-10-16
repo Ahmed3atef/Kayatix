@@ -110,22 +110,30 @@
                 <strong>Kayatix | A.Y.A.T. Engine</strong> &mdash; <em>Automated Yield for Applicant &amp; Talent</em> &copy; 2026. Built with FastAPI, Pydantic V2 &amp; Multi-Provider AI Fallback.
             </div>
             <div class="d-flex align-items-center gap-2 mt-2 mt-md-0" id="aiProviderFooterBadges">
-                {% set gemini_ready = app_settings is defined and app_settings.GEMINI_API_KEY %}
-                {% set groq_ready = app_settings is defined and app_settings.GROQ_API_KEY %}
-                {% set openrouter_ready = app_settings is defined and app_settings.OPENROUTER_API_KEY %}
+                {% set gemini_configured = app_settings.GEMINI_API_KEY and app_settings.GEMINI_API_KEY.strip() %}
+                {% set groq_configured = app_settings.GROQ_API_KEY and app_settings.GROQ_API_KEY.strip() %}
+                {% set openrouter_configured = app_settings.OPENROUTER_API_KEY and app_settings.OPENROUTER_API_KEY.strip() %}
 
-                <span id="footerBadgeGemini" class="badge {% if gemini_ready %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="{% if gemini_ready %}Priority 1: Gemini 2.5 Flash (Found &amp; Valid){% else %}Priority 1: Gemini 2.5 Flash (Not Configured){% endif %}">
-                    <i class="bi bi-circle-fill {% if gemini_ready %}text-success{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
+                {% set gemini_valid = gemini_configured and (provider_health is defined and provider_health.get('gemini') == 'valid') %}
+                {% set groq_valid = groq_configured and (provider_health is defined and provider_health.get('groq') == 'valid') %}
+                {% set openrouter_valid = openrouter_configured and (provider_health is defined and provider_health.get('openrouter') == 'valid') %}
+
+                {% set gemini_invalid = gemini_configured and (provider_health is defined and provider_health.get('gemini') == 'invalid') %}
+                {% set groq_invalid = groq_configured and (provider_health is defined and provider_health.get('groq') == 'invalid') %}
+                {% set openrouter_invalid = openrouter_configured and (provider_health is defined and provider_health.get('openrouter') == 'invalid') %}
+
+                <span id="footerBadgeGemini" class="badge {% if gemini_valid %}bg-success-subtle text-success border border-success-subtle{% elif gemini_invalid %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="Priority 1: Gemini 2.5 Flash">
+                    <i class="bi bi-circle-fill {% if gemini_valid %}text-success{% elif gemini_invalid %}text-danger{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
                     <span>Priority 1: Gemini 2.5 Flash</span>
                 </span>
 
-                <span id="footerBadgeGroq" class="badge {% if groq_ready %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="{% if groq_ready %}Priority 2: Groq Llama 3.3 70B (Found &amp; Valid){% else %}Priority 2: Groq Llama 3.3 70B (Not Configured){% endif %}">
-                    <i class="bi bi-circle-fill {% if groq_ready %}text-success{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
+                <span id="footerBadgeGroq" class="badge {% if groq_valid %}bg-success-subtle text-success border border-success-subtle{% elif groq_invalid %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="Priority 2: Groq Llama 3.3 70B">
+                    <i class="bi bi-circle-fill {% if groq_valid %}text-success{% elif groq_invalid %}text-danger{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
                     <span>Priority 2: Groq Llama 3.3 70B</span>
                 </span>
 
-                <span id="footerBadgeOpenRouter" class="badge {% if openrouter_ready %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="{% if openrouter_ready %}Priority 3: OpenRouter Fallback (Found &amp; Valid){% else %}Priority 3: OpenRouter Fallback (Not Configured){% endif %}">
-                    <i class="bi bi-circle-fill {% if openrouter_ready %}text-success{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
+                <span id="footerBadgeOpenRouter" class="badge {% if openrouter_valid %}bg-success-subtle text-success border border-success-subtle{% elif openrouter_invalid %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-secondary-subtle text-secondary border{% endif %} d-inline-flex align-items-center gap-1" title="Priority 3: OpenRouter Fallback">
+                    <i class="bi bi-circle-fill {% if openrouter_valid %}text-success{% elif openrouter_invalid %}text-danger{% else %}text-secondary opacity-50{% endif %}" style="font-size: 0.45rem;"></i>
                     <span>Priority 3: OpenRouter Fallback</span>
                 </span>
             </div>

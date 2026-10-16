@@ -256,17 +256,19 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ### 5.6 Settings & Live Provider Diagnostics
 
 - **URL**: **`http://localhost:8000/settings`**
-- **No Disk `.env` Required**:
-    - Configuration is persisted directly in SQLite (`user_settings` table) and loaded into application memory at startup.
 - **Guided Form**:
-    - Enter API keys for **Google AI Studio**, **Groq Cloud**, **OpenRouter**, and **Google CSE**.
-    - Choose your subscription tier (`standard`, `pro`, `enterprise`).
-    - Configure rate limits (RPM) and timeout thresholds.
+    - Manage credentials for **Google AI Studio**, **Groq Cloud**, **OpenRouter**, and **Google Search Engine ID (`cx`)**.
+    - Configure subscription tiers (`standard`, `pro`, `enterprise`) and rate limits (RPM).
 - **One-Click Live Connectivity Diagnostics**:
-    - Click **"Validate Credentials"** to run live handshake checks against Gemini, Groq, OpenRouter, and Google CSE.
-    - The results modal provides clear green/red connection status badges and helpful troubleshooting advice.
-- **Raw Configuration Editor**:
-    - Switch to the **Raw Config Editor** tab to inspect or edit the configuration in standard environment variable syntax. It syncs directly back to the database.
+    - Click **"Validate Credentials"** to run live handshake checks against all configured AI providers.
+    - Status indicators in the global footer strictly verify connectivity: 🟢 Green (active & valid), 🔴 Red (invalid key), and ⚪ Gray (unconfigured).
+- **Job Description Templates Tab**:
+    - Direct access to standard role benchmarks across Engineering, Product, HR, Finance, and Marketing.
+    - Fully searchable, customizable, and ready for 1-click loading into the Resume Screener or Portfolio Analyzer.
+- **Enterprise Database Security**:
+    - `DATABASE_URL` is resolved using a strict 3-tier hierarchy (`.env` &rarr; system `os.environ` &rarr; local SQLite fallback).
+    - Database credentials are strictly masked (`••••••••`) across all UI views and API payloads, preventing credential exposure in browser network inspection.
+
 
 ---
 

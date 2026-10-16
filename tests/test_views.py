@@ -68,7 +68,7 @@ async def test_settings_view(client):
     assert response.status_code == 200
     assert "Settings" in response.text
     assert "geminiKey" in response.text
-    assert "rawEnvEditor" in response.text
+    assert "rawEnvEditor" not in response.text
 
 
 @pytest.mark.asyncio
@@ -120,11 +120,15 @@ async def test_documentation_page_by_slug(client):
 async def test_footer_ai_provider_indicators(client):
     """Verifies that footer priority pills render green when keys are active and found."""
     from app.core.config import settings
+    from app.services.settings_service import provider_health_cache
 
-    # 1. With keys active
+    # 1. With keys active and valid
     settings.GEMINI_API_KEY = "test_gemini_key"
     settings.GROQ_API_KEY = "test_groq_key"
     settings.OPENROUTER_API_KEY = ""
+    provider_health_cache["gemini"] = "valid"
+    provider_health_cache["groq"] = "valid"
+    provider_health_cache["openrouter"] = "unconfigured"
 
     resp = await client.get("/")
     assert resp.status_code == 200

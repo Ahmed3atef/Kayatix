@@ -6,6 +6,9 @@ from app.services.ai_engine import (
     _clean_json_string,
     compute_request_hash,
     evaluate_candidate_with_fallback,
+    segment_candidate_profile,
+    extract_jd_core_facets,
+    build_rag_augmented_prompt,
 )
 
 
@@ -144,3 +147,76 @@ async def test_evaluate_candidate_all_providers_exhausted():
                 candidate_text="Jane Doe CV Text",
                 job_description="Python Backend Engineer JD",
             )
+
+
+def test_segment_candidate_profile():
+    sample_cv = """
+    John Doe
+    john@example.com
+
+    SKILLS
+    Python, FastAPI, Docker, PostgreSQL, AWS
+
+    EXPERIENCE
+    Senior Backend Engineer at TechCorp (2021 - Present)
+    - Built asynchronous API services with FastAPI.
+    - Managed relational data on PostgreSQL.
+
+    PROJECTS
+    Distributed Task Queue
+    - Implemented redis-backed task executor.
+
+    EDUCATION
+    B.S. in Computer Science - University of Science (2016 - 2020)
+    """
+
+    segments = segment_candidate_profile(sample_cv)
+    assert "technical_skills" in segments
+    assert "professional_experience" in segments
+    assert "engineering_projects" in segments
+    assert "education_certifications" in segments
+    assert "candidate_summary" in segments
+
+    assert "Python, FastAPI, Docker" in segments["technical_skills"]
+    assert "TechCorp" in segments["professional_experience"]
+    assert "Distributed Task Queue" in segments["engineering_projects"]
+    assert "University of Science" in segments["education_certifications"]
+    assert "John Doe" in segments["candidate_summary"]
+
+
+def test_extract_jd_core_facets():
+    jd_text = """
+    Senior Python Engineer
+    Requirements:
+    - 5+ years with Python and async frameworks
+    - Strong database modeling with PostgreSQL
+
+    Responsibilities:
+    - Lead architecture of microservices
+    - Mentor junior developers
+
+    Nice to have:
+    - Experience with Kubernetes and Terraform
+    """
+
+    facets = extract_jd_core_facets(jd_text)
+    assert "core_requirements" in facets
+    assert "nice_to_haves" in facets
+    assert "responsibilities" in facets
+
+    assert "5+ years with Python" in facets["core_requirements"]
+    assert "Kubernetes" in facets["nice_to_haves"]
+    assert "microservices" in facets["responsibilities"]
+
+
+def test_build_rag_augmented_prompt():
+    cv = "Alice Wonderland\nSKILLS\nPython, Django\nEXPERIENCE\nDev at ABC"
+    jd = "Requirements:\nPython dev\nResponsibilities:\nCode\nNice to have:\nDocker"
+
+    prompt = build_rag_augmented_prompt(cv, jd)
+    assert "### TARGET ROLE REQUIREMENTS & BENCHMARK" in prompt
+    assert "### RAG RETRIEVED CANDIDATE EVIDENCE MATRIX" in prompt
+    assert "### FULL CANDIDATE VERBATIM PROVENANCE" in prompt
+    assert "Alice Wonderland" in prompt
+    assert "Python dev" in prompt
+
