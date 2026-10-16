@@ -53,17 +53,22 @@
     - **100% Offline Local Engine**: Zero-quota, fully offline evaluation with deterministic scoring and template questions.
     - **Cloud LLM Cascade**: Full end-to-end multi-provider LLM processing.
 - **100% Legal Candidate Sourcing (Zero Account Bans)**:
-    - **Google X-Ray Search Engine**: Discovers public LinkedIn profiles via Google Custom Search JSON API dorking without sending authenticated requests to LinkedIn servers.
-- **Deep Portfolio & Personal Website Analysis**: Asynchronously scrapes and strips boilerplate from candidate personal blogs, technical portfolios, and GitHub readmes using `httpx` and `trafilatura`.
+    - **Google X-Ray Search Engine**: Discovers public LinkedIn profiles via Google X-Ray Dorking with zero authenticated requests to LinkedIn servers. Features embedded zero-key CSE widget support and 1-Click direct Google search.
+- **RAG Architecture & Grounded Chain-of-Thought Prompting**:
+    - Preprocesses candidates through a 3-stage RAG pipeline (semantic chunking of skills, tenures, projects, and credentials).
+    - Uses 5-stage Chain-of-Thought reasoning to audit genuine commercial software experience, respect Boolean alternatives (*"FastAPI or Django"*), calibrate 0-100 scores, and anchor interview questions in real candidate projects.
+- **Deep Portfolio & Personal Website Analysis**: Asynchronously scrapes and strips boilerplate from candidate personal blogs, technical portfolios, and GitHub readmes using `httpx` and `trafilatura` with client-side SPA bundle discovery.
 - **High Availability Multi-Provider AI Failover**:
     - Aggregates developer quotas across **Google AI Studio (Gemini 2.5 Flash)**, **Groq Cloud (Llama 3.3 70B)**, and **OpenRouter (Fallback Pool)**.
-    - Transparently handles HTTP 429 rate limits via circuit-breaker fallback logic.
-    - **SHA-256 Deduplication Cache**: Caches `(candidate_text + job_description)` checksums in SQLite to accelerate repetitive evaluations and eliminate redundant model calls.
+    - Transparently handles HTTP 429 rate limits and 503 spikes via circuit-breaker fallback logic.
+    - **Active Provider Cache Validation**: SHA-256 caching with active provider verification and force refresh support.
 - **Configurable Job Description Templates**:
-    - Full CRUD management in **Settings &rarr; JD Templates** to create, edit, customize, copy, and delete standard job benchmarks for any industry or department (Engineering, HR, Marketing, Finance, Sales, Product, etc.).
+    - Full CRUD management in **Settings &rarr; JD Templates** to create, edit, customize, copy, and delete standard job benchmarks for any industry or department.
     - Database-persisted with out-of-the-box defaults, instantly accessible via the **"Load Template"** dropdown inside both the Resume Screener and Portfolio Analyzer.
-- **Zero-Disk Configuration Requirement**:
-    - **No `.env` file required on disk**. Out-of-the-box defaults are stored directly inside the SQLite database (`user_settings` table) and managed live through the Web UI.
+- **Universal Database Engine with Strict Resolution**:
+    - Supports both local embedded **SQLite** and cloud **PostgreSQL** (Neon, Supabase, AWS RDS, Docker).
+    - Strict resolution hierarchy: `.env` &rarr; system `os.environ` &rarr; local SQLite default.
+    - Full password masking (`••••••••`) guarantees credentials never leak to the client browser.
 
 ---
 
