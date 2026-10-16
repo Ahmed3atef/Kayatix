@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from typing import Optional, Tuple
 from urllib.parse import urlparse
@@ -9,7 +10,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.domain import EvaluationCache
 from app.schemas.payloads import EvaluationAPIResponse, CandidateEvaluationResult
-from app.services.pdf_service import extract_clean_pdf_text
+from app.services.ai_evaluator import evaluate_candidate_pipeline
 from app.services.scraper_service import scrape_candidate_portfolio
 from app.services.ai_engine import compute_request_hash, evaluate_candidate
 
@@ -19,10 +20,10 @@ router = APIRouter(prefix="/api/v1/evaluation", tags=["Candidate Evaluation"])
 
 
 async def evaluate_candidate_with_fallback(
-    candidate_text: str, job_description: str
+    candidate_text: str, job_description: str, db: Optional[AsyncSession] = None
 ) -> Tuple[CandidateEvaluationResult, str]:
     """Evaluation wrapper that routes 100% through the multi-provider Cloud LLM cascade."""
-    return await evaluate_candidate(candidate_text, job_description)
+    return await evaluate_candidate(candidate_text, job_description, db=db)
 
 
 async def _process_and_cache_evaluation(
@@ -31,6 +32,7 @@ async def _process_and_cache_evaluation(
     source_type: str,
     db: AsyncSession,
     force_refresh: bool = False,
+    extraction_method: Optional[str] = "standard_parser",
 ) -> EvaluationAPIResponse:
     req_hash = compute_request_hash(candidate_text, job_description)
 
@@ -47,6 +49,8 @@ async def _process_and_cache_evaluation(
             provider_still_active = bool(settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip())
         elif "groq" in cached_provider:
             provider_still_active = bool(settings.GROQ_API_KEY and settings.GROQ_API_KEY.strip())
+        elif "mistral" in cached_provider:
+            provider_still_active = bool(settings.MISTRAL_API_KEY and settings.MISTRAL_API_KEY.strip())
         elif "openrouter" in cached_provider:
             provider_still_active = bool(settings.OPENROUTER_API_KEY and settings.OPENROUTER_API_KEY.strip())
 
@@ -66,14 +70,15 @@ async def _process_and_cache_evaluation(
                 cached=True,
                 provider_used=cached_record.provider_used,
                 analysis=CandidateEvaluationResult.model_validate(cached_record.evaluation_json),
+                extraction_method=extraction_method,
             )
 
-    # Run Candidate Evaluation (Real Cloud LLM Cascade: Gemini -> Groq -> OpenRouter)
+    # Run Candidate Evaluation (Real Cloud LLM Cascade: Gemini -> Groq -> Mistral -> OpenRouter)
     logger.info(
         f"[AI Evaluator] Initiating live AI candidate evaluation (Source: {source_type}, "
         f"Candidate text: {len(candidate_text)} chars, JD text: {len(job_description)} chars)..."
     )
-    evaluation, provider = await evaluate_candidate_with_fallback(candidate_text, job_description)
+    evaluation, provider = await evaluate_candidate_with_fallback(candidate_text, job_description, db=db)
     logger.info(
         f"[AI Evaluator] Evaluation completed successfully by AI provider '{provider}' "
         f"for '{evaluation.candidate_name}' (Score: {evaluation.match_percentage}%, YOE: {evaluation.estimated_years_experience})."
@@ -102,6 +107,7 @@ async def _process_and_cache_evaluation(
         cached=False,
         provider_used=provider,
         analysis=evaluation,
+        extraction_method=extraction_method,
     )
 
 
@@ -109,6 +115,7 @@ async def _process_and_cache_evaluation(
 async def evaluate_pdf_resume(
     job_description: str = Form(..., description="Target Job Description text"),
     resume_file: UploadFile = File(..., description="Candidate CV or LinkedIn Export PDF"),
+    portfolio_markdown: Optional[str] = Form("", description="Optional candidate portfolio markdown or text"),
     force_refresh: bool = Form(False, description="Bypass cache and force fresh AI evaluation"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -121,15 +128,69 @@ async def evaluate_pdf_resume(
     try:
         logger.info(f"[PDF Evaluation] Received file upload: '{resume_file.filename}'")
         pdf_bytes = await resume_file.read()
-        clean_text = extract_clean_pdf_text(pdf_bytes)
-        logger.info(f"[PDF Evaluation] Clean text successfully parsed ({len(clean_text)} chars). Dispatching to AI engine.")
-        return await _process_and_cache_evaluation(clean_text, job_description, "pdf_resume", db, force_refresh=force_refresh)
+        if not pdf_bytes:
+            raise ValueError("The uploaded PDF file is empty.")
+
+        # Compute SHA-256 for deterministic caching
+        req_hash = hashlib.sha256(pdf_bytes + b"||" + job_description.encode("utf-8")).hexdigest()
+
+        # Check Cache
+        stmt = select(EvaluationCache).where(EvaluationCache.request_hash == req_hash)
+        result = await db.execute(stmt)
+        cached_record = result.scalar_one_or_none()
+
+        if cached_record and not force_refresh:
+            logger.info(f"[PDF Evaluation] Cache hit for request {req_hash[:8]} (Provider: {cached_record.provider_used}).")
+            return EvaluationAPIResponse(
+                cached=True,
+                provider_used=cached_record.provider_used,
+                analysis=CandidateEvaluationResult.model_validate(cached_record.evaluation_json),
+                extraction_method=cached_record.provider_used,
+            )
+
+        logger.info(
+            f"[PDF Evaluation] Dispatching single-shot / cloud OCR evaluation pipeline for '{resume_file.filename}'..."
+        )
+        hr_result, pipeline_used = await evaluate_candidate_pipeline(
+            pdf_bytes=pdf_bytes,
+            job_description=job_description,
+            portfolio_markdown=portfolio_markdown or "",
+        )
+
+        evaluation = hr_result.to_candidate_evaluation_result()
+
+        # Persist or update Cache
+        if cached_record:
+            cached_record.candidate_name = evaluation.candidate_name
+            cached_record.source_type = "pdf_resume"
+            cached_record.match_score = evaluation.match_percentage
+            cached_record.provider_used = pipeline_used
+            cached_record.evaluation_json = evaluation.model_dump()
+        else:
+            new_record = EvaluationCache(
+                request_hash=req_hash,
+                candidate_name=evaluation.candidate_name,
+                source_type="pdf_resume",
+                match_score=evaluation.match_percentage,
+                provider_used=pipeline_used,
+                evaluation_json=evaluation.model_dump(),
+            )
+            db.add(new_record)
+        await db.commit()
+
+        return EvaluationAPIResponse(
+            cached=False,
+            provider_used=pipeline_used,
+            analysis=evaluation,
+            extraction_method=pipeline_used,
+        )
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(ve),
         )
     except Exception as e:
+        logger.error(f"[PDF Evaluation] Failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),

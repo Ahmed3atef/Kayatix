@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, HttpUrl
 
 
@@ -12,19 +12,28 @@ class InterviewQuestionSchema(BaseModel):
 class CandidateEvaluationResult(BaseModel):
     candidate_name: Optional[str] = Field(default="Unknown Candidate", description="Extracted full name")
     match_percentage: int = Field(ge=0, le=100, description="Strict merit-based match score from 0 to 100")
-    executive_summary: str = Field(description="2-3 sentence objective assessment of candidate fit")
-    estimated_years_experience: float = Field(ge=0.0, description="Total calculated years of relevant professional experience")
+    executive_summary: str = Field(default="", description="2-3 sentence objective assessment of candidate fit")
+    estimated_years_experience: float = Field(default=0.0, ge=0.0, description="Total calculated years of relevant professional experience")
     matched_skills: List[str] = Field(default_factory=list, description="Skills explicitly verified in the candidate profile that match the JD")
     missing_critical_skills: List[str] = Field(default_factory=list, description="Required JD skills completely absent from the candidate profile")
     detected_projects_and_impact: List[str] = Field(default_factory=list, description="Key technical projects, architectures, or quantifiable metrics achieved")
     red_flags_and_gaps: List[str] = Field(default_factory=list, description="Unexplained timeline gaps, vague claims without proof, or frequent job hopping")
     tailored_interview_questions: List[InterviewQuestionSchema] = Field(default_factory=list, description="5 to 7 custom interview questions")
 
+    @property
+    def years_of_experience(self) -> float:
+        return self.estimated_years_experience
+
+    @property
+    def red_flags(self) -> List[str]:
+        return self.red_flags_and_gaps
+
 
 class EvaluationAPIResponse(BaseModel):
     cached: bool
     provider_used: str
     analysis: CandidateEvaluationResult
+    extraction_method: Optional[str] = "cloud_ocr"
 
 
 class XRaySearchRequest(BaseModel):
@@ -47,6 +56,7 @@ class UserSettingsResponse(BaseModel):
     gemini_api_key_configured: bool
     groq_api_key_configured: bool
     openrouter_api_key_configured: bool
+    mistral_api_key_configured: bool = False
     google_cse_api_key_configured: bool
     google_cse_cx_id_configured: bool
     subscription_tier: str = "standard"
@@ -64,6 +74,7 @@ class UserSettingsUpdateRequest(BaseModel):
     gemini_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
+    mistral_api_key: Optional[str] = None
     google_cse_api_key: Optional[str] = None
     google_cse_cx_id: Optional[str] = None
     subscription_tier: Optional[str] = None
@@ -99,6 +110,7 @@ class SettingsValidationResponse(BaseModel):
     groq: ProviderValidationStatus
     openrouter: ProviderValidationStatus
     google_cse: ProviderValidationStatus
+    mistral: Optional[ProviderValidationStatus] = None
     overall_ready: bool
 
 
@@ -121,5 +133,74 @@ class JobTemplateResponse(BaseModel):
     description: str
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class JobTemplateSchema(BaseModel):
+    title: str = Field(..., min_length=2, max_length=255, description="Official job title")
+    category: str = Field(default="General", max_length=100, description="Department or job category")
+    description: str = Field(..., min_length=10, description="Full job description requirements and specs")
+
+
+class SystemSettingsDefaultsSchema(BaseModel):
+    project_name: str = Field(default="Kayatix - A.Y.A.T. Engine", description="Default project or platform name")
+    version: str = Field(default="1.0.0", description="Default application version")
+    subscription_tier: str = Field(default="standard", description="Default subscription tier")
+    evaluation_mode: str = Field(default="llm_cascade", description="Default candidate evaluation mode")
+    rate_limit_rpm: int = Field(default=15, ge=1, le=1000, description="Default rate limit in requests per minute")
+
+
+class AppDefaultsSchema(BaseModel):
+    version: str = Field(default="1.0.0", description="Schema specification version")
+    modified_timestamp: Optional[str] = Field(
+        default="2026-10-16T19:00:00Z",
+        description="ISO timestamp marking when the schema file was last modified"
+    )
+    system_settings: SystemSettingsDefaultsSchema = Field(
+        default_factory=SystemSettingsDefaultsSchema,
+        description="System configuration defaults"
+    )
+    job_templates: List[JobTemplateSchema] = Field(
+        default_factory=list,
+        description="List of standard job description templates"
+    )
+
+
+class DefaultsSyncResult(BaseModel):
+    templates_inserted: int = Field(default=0, description="Number of new templates inserted into database")
+    templates_updated: int = Field(default=0, description="Number of existing templates updated with modified schema data")
+    templates_unchanged: int = Field(default=0, description="Number of templates already in sync")
+    settings_synced: bool = Field(default=False, description="Whether system settings defaults were updated in database")
+    instructions_synced: bool = Field(default=False, description="Whether RAG & AI instructions were synced into database")
+    message: str = Field(default="", description="Human-readable synchronization summary message")
+
+
+class DefaultsSchemaResponse(BaseModel):
+    json_schema: Dict[str, Any] = Field(description="Standard JSON Schema specification")
+    defaults: AppDefaultsSchema = Field(description="Active default data payload")
+
+
+class RAGAIInstructionSchema(BaseModel):
+    name: str = Field(default="default_evaluator", description="Unique identifier for the evaluator prompt suite")
+    description: Optional[str] = Field(None, description="Overview of the prompt persona and evaluation objectives")
+    modified_timestamp: Optional[str] = Field(
+        default="2026-10-16T19:00:00Z",
+        description="ISO timestamp marking when instructions were last modified"
+    )
+    system_instruction: str = Field(..., min_length=20, description="Principal Bar Raiser system instruction with CoT guidelines")
+    rag_prompt_template: str = Field(..., min_length=20, description="RAG candidate evidence matrix formatting template")
+
+
+class RAGAIInstructionResponse(BaseModel):
+    id: Optional[int] = None
+    name: str
+    description: Optional[str] = None
+    modified_timestamp: Optional[str] = None
+    system_instruction: str
+    rag_prompt_template: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    json_schema: Optional[Dict[str, Any]] = None
+
+
 
 

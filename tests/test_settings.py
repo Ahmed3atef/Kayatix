@@ -23,6 +23,7 @@ async def test_get_and_update_settings_in_database(db_session):
     update_req = UserSettingsUpdateRequest(
         gemini_api_key="new_gemini_key",
         groq_api_key="new_groq_key",
+        mistral_api_key="new_mistral_key",
         subscription_tier="pro",
         rate_limit_rpm=30,
     )
@@ -30,12 +31,14 @@ async def test_get_and_update_settings_in_database(db_session):
 
     assert updated.gemini_api_key_configured is True
     assert updated.groq_api_key_configured is True
+    assert updated.mistral_api_key_configured is True
     assert updated.subscription_tier == "pro"
     assert updated.rate_limit_rpm == 30
 
     # Verify that in-memory runtime settings were updated
     assert settings.GEMINI_API_KEY == "new_gemini_key"
     assert settings.GROQ_API_KEY == "new_groq_key"
+    assert settings.MISTRAL_API_KEY == "new_mistral_key"
 
 
 @pytest.mark.asyncio
@@ -289,6 +292,39 @@ def test_create_engine_for_url_pooling_and_pre_ping():
     assert pg_eng.pool._recycle == 300
     assert pg_eng.pool.size() == 10
     assert pg_eng.url.query.get("statement_cache_size") is None  # passed via connect_args
+
+
+@pytest.mark.asyncio
+async def test_validate_mistral_key_unconfigured():
+    from app.services.settings_service import validate_mistral_key
+    res = await validate_mistral_key("")
+    assert res.status == "unconfigured"
+
+
+@pytest.mark.asyncio
+async def test_validate_mistral_key_valid():
+    from app.services.settings_service import validate_mistral_key
+    with patch("httpx.AsyncClient.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_get.return_value = mock_resp
+
+        res = await validate_mistral_key("valid_mistral_key")
+        assert res.status == "valid"
+        assert "Mistral AI" in res.message
+
+
+@pytest.mark.asyncio
+async def test_validate_mistral_key_invalid():
+    from app.services.settings_service import validate_mistral_key
+    with patch("httpx.AsyncClient.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_get.return_value = mock_resp
+
+        res = await validate_mistral_key("invalid_key")
+        assert res.status == "invalid"
+        assert "Invalid API key" in res.message
 
 
 

@@ -130,6 +130,40 @@ async def test_evaluate_candidate_fallback_to_openrouter_when_gemini_and_groq_fa
 
 
 @pytest.mark.asyncio
+async def test_evaluate_candidate_fallback_to_mistral_when_gemini_and_groq_fail(sample_candidate_evaluation):
+    """
+    When Gemini and Groq fail, and MISTRAL_API_KEY is configured,
+    the cascade evaluates using Mistral AI (mistral-small-latest).
+    """
+    from app.core.config import settings
+    valid_json = sample_candidate_evaluation.model_dump_json()
+
+    with (
+        patch.object(settings, "MISTRAL_API_KEY", "test_mistral_api_key"),
+        patch("app.services.ai_engine._call_gemini", side_effect=Exception("Gemini Quota Exceeded 429")),
+        patch(
+            "app.services.ai_engine._call_openai_compatible_provider",
+            side_effect=[
+                Exception("Groq Rate Limit Exceeded 429"),
+                valid_json,  # Mistral succeeds
+            ],
+        ) as mock_openai_provider,
+    ):
+        result, provider = await evaluate_candidate_with_fallback(
+            candidate_text="Jane Doe CV Text",
+            job_description="Python Backend Engineer JD",
+        )
+
+        assert provider == "mistral/mistral-small-latest"
+        assert result.candidate_name == "Jane Doe"
+        assert mock_openai_provider.call_count == 2
+        # Verify Mistral base URL was targeted
+        last_call_kwargs = mock_openai_provider.call_args[1]
+        assert "api.mistral.ai" in last_call_kwargs["base_url"]
+        assert last_call_kwargs["model_name"] == "mistral-small-latest"
+
+
+@pytest.mark.asyncio
 async def test_evaluate_candidate_all_providers_exhausted():
     """
     When Gemini, Groq, and OpenRouter all fail,

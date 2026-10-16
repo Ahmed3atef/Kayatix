@@ -34,11 +34,13 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Sync UserSettings from active database into runtime in-memory settings
+    # Sync UserSettings and Job Templates schema defaults into database (Global Insertion & Schema Sync)
     try:
-        from app.services.settings_service import get_or_create_user_settings
+        from app.services.settings_service import sync_global_defaults, get_or_create_user_settings
         async with AsyncSessionLocal() as session:
+            sync_res = await sync_global_defaults(session)
             await get_or_create_user_settings(session)
+            logger.info(f"[Startup Global Defaults Sync] {sync_res.message}")
 
             from app.core.database import mask_database_url
             logger.info("=" * 60)
@@ -46,6 +48,7 @@ async def lifespan(app: FastAPI):
             logger.info(f" -> Database Backend : {mask_database_url(settings.DATABASE_URL)}")
             logger.info(f" -> Google Gemini    : {'[ACTIVE]' if settings.GEMINI_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Groq Cloud       : {'[ACTIVE]' if settings.GROQ_API_KEY else '[NOT SET]'}")
+            logger.info(f" -> Mistral AI (OCR) : {'[ACTIVE]' if settings.MISTRAL_API_KEY else '[NOT SET]'}")
             logger.info(f" -> OpenRouter       : {'[ACTIVE]' if settings.OPENROUTER_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Google CSE Key   : {'[ACTIVE]' if settings.GOOGLE_CSE_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Google CSE CX    : {'[ACTIVE]' if settings.GOOGLE_CSE_CX_ID else '[NOT SET]'}")

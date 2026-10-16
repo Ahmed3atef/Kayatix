@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, patch
 import pytest
+from app.core.config import settings
 from app.schemas.payloads import XRayProfileItem
 
 
@@ -24,34 +25,86 @@ async def test_evaluate_pdf_resume_non_pdf_rejection(client):
 
 
 @pytest.mark.asyncio
-async def test_evaluate_pdf_resume_success(client, sample_candidate_evaluation):
-    """Successful PDF upload parses and evaluates candidate."""
+async def test_evaluate_pdf_resume_success(client):
+    """Successful PDF upload parses and evaluates candidate via single-shot evaluation."""
     files = {"resume_file": ("resume.pdf", b"%PDF-1.4 test resume pdf bytes", "application/pdf")}
     data = {"job_description": "We need a Senior Python Engineer with FastAPI"}
 
-    clean_cv_text = (
-        "John Doe Senior Software Engineer\n"
-        "Over 8 years experience building FastAPI backends, Docker containers, and PostgreSQL databases."
+    from app.services.ai_evaluator import HRAnalysisResult, InterviewQuestion
+    hr_result = HRAnalysisResult(
+        candidate_name="Jane Doe",
+        match_percentage=92,
+        matched_skills=["Python", "FastAPI"],
+        missing_critical_skills=[],
+        years_of_experience=6.5,
+        executive_summary="Strong match for FastAPI role.",
+        red_flags=[],
+        tailored_interview_questions=[
+            InterviewQuestion(
+                category="Technical",
+                question="Explain FastAPI dependency injection.",
+                target_skill_or_gap="FastAPI Depends",
+                expected_answer_criteria="Yield and sub-dependencies.",
+            ),
+            InterviewQuestion(
+                category="System Design",
+                question="How do you handle async background tasks?",
+                target_skill_or_gap="Async architecture",
+                expected_answer_criteria="Celery, Redis, or asyncio tasks.",
+            ),
+        ],
     )
 
-    with (
-        patch("app.api.v1.endpoints_evaluation.extract_clean_pdf_text", return_value=clean_cv_text),
-        patch(
-            "app.api.v1.endpoints_evaluation.evaluate_candidate_with_fallback",
-            new_callable=AsyncMock,
-        ) as mock_eval,
-    ):
-        mock_eval.return_value = (sample_candidate_evaluation, "google/gemini-2.5-flash")
-
+    with patch(
+        "app.api.v1.endpoints_evaluation.evaluate_candidate_pipeline",
+        new_callable=AsyncMock,
+        return_value=(hr_result, "gemini-2.5-flash-single-shot"),
+    ) as mock_eval:
         response = await client.post("/api/v1/evaluation/resume-pdf", data=data, files=files)
         assert response.status_code == 200
         payload = response.json()
 
         assert payload["cached"] is False
-        assert payload["provider_used"] == "google/gemini-2.5-flash"
+        assert payload["provider_used"] == "gemini-2.5-flash-single-shot"
         assert payload["analysis"]["candidate_name"] == "Jane Doe"
         assert payload["analysis"]["match_percentage"] == 92
+        assert payload["extraction_method"] == "gemini-2.5-flash-single-shot"
         assert len(payload["analysis"]["tailored_interview_questions"]) == 2
+        mock_eval.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_evaluate_pdf_resume_with_mistral_ocr(client):
+    """Verifies that PDF resume evaluation uses OCR fallback when single-shot falls back."""
+    files = {"resume_file": ("resume_scanned.pdf", b"%PDF-1.4 scanned bytes", "application/pdf")}
+    data = {"job_description": "We need a Senior Python Engineer with FastAPI"}
+
+    from app.services.ai_evaluator import HRAnalysisResult
+    hr_result = HRAnalysisResult(
+        candidate_name="Jane Doe",
+        match_percentage=92,
+        matched_skills=["Python", "FastAPI"],
+        missing_critical_skills=[],
+        years_of_experience=6.5,
+        executive_summary="Evaluated via OCR fallback.",
+        red_flags=[],
+        tailored_interview_questions=[],
+    )
+
+    with patch(
+        "app.api.v1.endpoints_evaluation.evaluate_candidate_pipeline",
+        new_callable=AsyncMock,
+        return_value=(hr_result, "mistral_ocr+groq-llama-3.3-70b"),
+    ) as mock_eval:
+        response = await client.post("/api/v1/evaluation/resume-pdf", data=data, files=files)
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["extraction_method"] == "mistral_ocr+groq-llama-3.3-70b"
+        assert payload["provider_used"] == "mistral_ocr+groq-llama-3.3-70b"
+        assert payload["analysis"]["candidate_name"] == "Jane Doe"
+        assert payload["analysis"]["match_percentage"] == 92
+        mock_eval.assert_called_once()
 
 
 @pytest.mark.asyncio

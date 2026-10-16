@@ -104,6 +104,24 @@
                                     <div class="form-text">Secondary fallback: <code>llama-3.3-70b-versatile</code> / <code>llama-3.1-8b-instant</code> on high-speed LPUs. Rate limit: 30 RPM.</div>
                                 </div>
 
+                                <!-- Mistral AI (OCR & Free Models) -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label for="mistralKey" class="form-label fw-semibold mb-0">
+                                            Mistral AI API Key <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1"><i class="bi bi-file-earmark-text me-1"></i>High-Fidelity PDF OCR</span> <span class="badge bg-secondary-subtle text-secondary border ms-1">Free Experiment Tier &bull; 1 RPS</span>
+                                        </label>
+                                        <a href="https://console.mistral.ai/api-keys/" target="_blank" class="small text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i> Get Mistral Key
+                                        </a>
+                                    </div>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-file-earmark-pdf text-muted"></i></span>
+                                        <input type="password" class="form-control font-monospace" id="mistralKey" placeholder="Your Mistral API Key..." value="{{ settings.mistral_api_key or '' }}">
+                                        <button class="btn btn-outline-secondary toggle-pwd" type="button" data-target="mistralKey"><i class="bi bi-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Powers state-of-the-art document OCR (<code>mistral-ocr-latest</code>) on uploaded resumes (scanned images, complex tables, multi-column layouts) &amp; free tier evaluation (<code>mistral-small-latest</code>).</div>
+                                </div>
+
                                 <!-- OpenRouter -->
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -228,6 +246,9 @@
                                 <p class="text-muted small mb-0">Configure standard role requirements and technical benchmarks used by the Resume Screener and Portfolio Analyzer.</p>
                             </div>
                             <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="syncSchemaDefaultsBtn" title="Sync database templates and system defaults with latest JSON schema">
+                                    <i class="bi bi-arrow-repeat"></i> Sync Schema
+                                </button>
                                 <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="resetTemplatesBtn">
                                     <i class="bi bi-arrow-counterclockwise"></i> Reset Defaults
                                 </button>
@@ -393,6 +414,7 @@
         return {
             geminiKey: document.getElementById('geminiKey')?.value ?? '',
             groqKey: document.getElementById('groqKey')?.value ?? '',
+            mistralKey: document.getElementById('mistralKey')?.value ?? '',
             openrouterKey: document.getElementById('openrouterKey')?.value ?? '',
             googleCseCx: document.getElementById('googleCseCx')?.value ?? '',
             googleCseKey: document.getElementById('googleCseKey')?.value ?? '',
@@ -424,7 +446,7 @@
 
     // Attach listeners to all inputs in settingsForm
     const monitoredFields = [
-        'geminiKey', 'groqKey', 'openrouterKey', 'googleCseCx', 
+        'geminiKey', 'groqKey', 'mistralKey', 'openrouterKey', 'googleCseCx', 
         'googleCseKey', 'evaluationMode', 'subscriptionTier', 'rateLimitRpm'
     ];
 
@@ -456,6 +478,7 @@
         const payload = {
             gemini_api_key: document.getElementById('geminiKey').value,
             groq_api_key: document.getElementById('groqKey').value,
+            mistral_api_key: document.getElementById('mistralKey').value,
             openrouter_api_key: document.getElementById('openrouterKey').value,
             google_cse_cx_id: document.getElementById('googleCseCx').value,
             evaluation_mode: document.getElementById('evaluationMode').value,
@@ -499,11 +522,12 @@
         resultCard.classList.remove('d-none');
         badge.className = 'badge bg-warning text-dark';
         badge.innerText = 'Testing...';
-        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, OpenRouter, and Google Search Engine...</div>';
+        detailsBody.innerHTML = '<div class="text-muted small">Pinging Gemini, Groq, Mistral, OpenRouter, and Google Search Engine...</div>';
 
         const payload = {
             gemini_api_key: document.getElementById('geminiKey').value,
             groq_api_key: document.getElementById('groqKey').value,
+            mistral_api_key: document.getElementById('mistralKey').value,
             openrouter_api_key: document.getElementById('openrouterKey').value,
             google_cse_cx_id: document.getElementById('googleCseCx').value
         };
@@ -520,11 +544,13 @@
             const providers = [
                 { name: 'Google Gemini', item: data.gemini, icon: 'bi-robot' },
                 { name: 'Groq Cloud LPU', item: data.groq, icon: 'bi-lightning-charge' },
+                { name: 'Mistral AI (OCR & LLM)', item: data.mistral, icon: 'bi-file-earmark-text' },
                 { name: 'OpenRouter Model Pool', item: data.openrouter, icon: 'bi-diagram-3' },
                 { name: 'Google Programmable Search (Widget)', item: data.google_cse, icon: 'bi-google' }
             ];
 
             providers.forEach(p => {
+                if (!p.item) return;
                 let badgeClass = 'bg-secondary';
                 let iconClass = 'bi-dash-circle';
                 if (p.item.status === 'valid') {
@@ -557,11 +583,13 @@
             localStorage.setItem('kayatix_ai_status', JSON.stringify({
                 gemini: data.gemini.status,
                 groq: data.groq.status,
+                mistral: data.mistral?.status,
                 openrouter: data.openrouter.status
             }));
             if (typeof updateFooterBadge === 'function') {
                 updateFooterBadge('footerBadgeGemini', data.gemini.status, 'Priority 1: Gemini 2.5 Flash');
                 updateFooterBadge('footerBadgeGroq', data.groq.status, 'Priority 2: Groq Llama 3.3 70B');
+                updateFooterBadge('footerBadgeMistral', data.mistral ? data.mistral.status : 'unconfigured', 'Mistral AI OCR & Models');
                 updateFooterBadge('footerBadgeOpenRouter', data.openrouter.status, 'Priority 3: OpenRouter Fallback');
             }
 
@@ -740,6 +768,25 @@
             setTimeout(() => window.location.reload(), 600);
         } catch (err) {
             showToast('Failed to reset templates: ' + err.message, 'danger');
+        }
+    });
+
+    // Sync Schema Defaults to Database
+    document.getElementById('syncSchemaDefaultsBtn')?.addEventListener('click', async function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+        try {
+            const resp = await fetch('/api/v1/settings/schema/defaults/sync', { method: 'POST' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            showToast(data.message, 'success');
+            setTimeout(() => window.location.reload(), 600);
+        } catch (err) {
+            showToast('Failed to sync schema: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Schema';
         }
     });
 </script>

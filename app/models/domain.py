@@ -53,6 +53,7 @@ class UserSettings(Base):
     version = Column(String(50), default="1.0.0")
     gemini_api_key = Column(String(255), nullable=True)
     groq_api_key = Column(String(255), nullable=True)
+    mistral_api_key = Column(String(255), nullable=True)
     openrouter_api_key = Column(String(255), nullable=True)
     google_cse_api_key = Column(String(255), nullable=True)
     google_cse_cx_id = Column(String(255), nullable=True)
@@ -61,6 +62,7 @@ class UserSettings(Base):
     rate_limit_rpm = Column(Integer, default=15)
     database_url = Column(String(1024), nullable=True)
     env_content = Column(Text, nullable=True)
+    job_templates_schema_timestamp = Column(String(50), nullable=True)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     @property
@@ -79,5 +81,20 @@ class JobTemplate(Base):
     description = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class AIInstruction(Base):
+    __tablename__ = "ai_instructions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True, nullable=False, default="default_evaluator")
+    description = Column(String(255), nullable=True)
+    system_instruction = Column(Text, nullable=False)
+    rag_prompt_template = Column(Text, nullable=False)
+    modified_timestamp = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
 
 

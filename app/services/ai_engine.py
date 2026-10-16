@@ -136,43 +136,103 @@ def extract_jd_core_facets(jd_text: str) -> dict[str, str]:
     }
 
 
-def build_rag_augmented_prompt(candidate_text: str, job_description: str) -> str:
+def build_rag_augmented_prompt(
+    candidate_text: str, job_description: str, rag_template: Optional[str] = None
+) -> str:
     """
     RAG Stage 3 - Augmented Generation Context Construction:
     Combines semantic chunks, requirement facets, and provenance verification
-    into a calibrated, high-precision prompt.
+    into a calibrated, high-precision prompt using database template if provided.
     """
     segments = segment_candidate_profile(candidate_text)
     jd_facets = extract_jd_core_facets(job_description)
 
+    mapping = {
+        "core_requirements": jd_facets['core_requirements'],
+        "nice_to_haves": jd_facets['nice_to_haves'],
+        "responsibilities": jd_facets['responsibilities'],
+        "technical_skills": segments['technical_skills'] or 'Refer to full candidate profile below',
+        "professional_experience": segments['professional_experience'] or 'Refer to full candidate profile below',
+        "engineering_projects": segments['engineering_projects'] or 'Refer to full candidate profile below',
+        "education_certifications": segments['education_certifications'] or 'Not provided',
+        "candidate_text": candidate_text,
+    }
+
+    if rag_template:
+        try:
+            return rag_template.format(**mapping)
+        except Exception as e:
+            logger.warning(f"[AI Engine] Error formatting custom RAG template: {e}. Falling back to default format.")
+
     return f"""### TARGET ROLE REQUIREMENTS & BENCHMARK
 [Core Mandatory Qualifications & Stack]:
-{jd_facets['core_requirements']}
+{mapping['core_requirements']}
 
 [Preferred / Secondary Skills]:
-{jd_facets['nice_to_haves']}
+{mapping['nice_to_haves']}
 
 [Role Scope & Responsibilities]:
-{jd_facets['responsibilities']}
+{mapping['responsibilities']}
 
 ---
 ### RAG RETRIEVED CANDIDATE EVIDENCE MATRIX
 [Candidate Skills & Tools Chunk]:
-{segments['technical_skills'] or 'Refer to full candidate profile below'}
+{mapping['technical_skills']}
 
 [Professional Experience & Tenures Chunk]:
-{segments['professional_experience'] or 'Refer to full candidate profile below'}
+{mapping['professional_experience']}
 
 [Key Projects & Engineering Artifacts Chunk]:
-{segments['engineering_projects'] or 'Refer to full candidate profile below'}
+{mapping['engineering_projects']}
 
 [Education & Credentials Chunk]:
-{segments['education_certifications'] or 'Not provided'}
+{mapping['education_certifications']}
 
 ---
 ### FULL CANDIDATE VERBATIM PROVENANCE
 {candidate_text}
 """
+
+
+async def get_active_ai_instruction(db: Optional[Any] = None) -> Tuple[str, str]:
+    """
+    Reads the active RAG prompt template and AI system instruction from the database
+    BEFORE any AI API call is executed.
+    If database record is not present, seeds it from rag_ai_instructions.json.
+    Falls back gracefully to the JSON schema file if database is unreachable.
+    Returns: (system_instruction, rag_prompt_template).
+    """
+    from sqlalchemy import select
+    from app.models.domain import AIInstruction
+    from app.services.settings_service import load_rag_ai_instructions_schema, sync_ai_instructions_to_database
+
+    if db is not None:
+        try:
+            stmt = select(AIInstruction).where(AIInstruction.name == "default_evaluator")
+            result = await db.execute(stmt)
+            inst = result.scalar_one_or_none()
+            if inst:
+                return inst.system_instruction, inst.rag_prompt_template
+            synced_inst = await sync_ai_instructions_to_database(db)
+            return synced_inst.system_instruction, synced_inst.rag_prompt_template
+        except Exception as e:
+            logger.warning(f"[AI Engine] Error reading AI instruction from db session: {e}. Trying fallback.")
+
+    try:
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            stmt = select(AIInstruction).where(AIInstruction.name == "default_evaluator")
+            result = await session.execute(stmt)
+            inst = result.scalar_one_or_none()
+            if inst:
+                return inst.system_instruction, inst.rag_prompt_template
+            synced_inst = await sync_ai_instructions_to_database(session)
+            return synced_inst.system_instruction, synced_inst.rag_prompt_template
+    except Exception as e:
+        logger.warning(f"[AI Engine] Error reading AI instruction from database: {e}. Falling back to rag_ai_instructions.json schema.")
+
+    file_schema = load_rag_ai_instructions_schema()
+    return file_schema.system_instruction, file_schema.rag_prompt_template
 
 
 def compute_request_hash(candidate_text: str, jd_text: str) -> str:
@@ -304,29 +364,40 @@ async def _call_openai_compatible_provider(
 
 
 async def evaluate_candidate(
-    candidate_text: str, job_description: str, mode: Optional[str] = None
+    candidate_text: str,
+    job_description: str,
+    mode: Optional[str] = None,
+    db: Optional[Any] = None,
 ) -> Tuple[CandidateEvaluationResult, str]:
     """
-    Evaluates candidate strictly using the multi-provider Cloud LLM cascade:
-    1. Gemini 2.5 Flash -> 2. Groq Llama 3.3 70B -> 3. OpenRouter Llama 3.1 Fallback.
-    All candidate analysis, skill matching, YOE estimation, and impact extraction
-    are managed 100% by the LLM.
+    Evaluates candidate strictly using the multi-provider Cloud LLM cascade.
+    First reads RAG prompt template and AI system instruction from the database.
     """
-    return await evaluate_candidate_with_fallback(candidate_text, job_description)
+    return await evaluate_candidate_with_fallback(candidate_text, job_description, db=db)
 
 
 async def evaluate_candidate_with_fallback(
-    candidate_text: str, job_description: str
+    candidate_text: str,
+    job_description: str,
+    db: Optional[Any] = None,
 ) -> Tuple[CandidateEvaluationResult, str]:
     """
     Executes full candidate evaluation across the multi-provider cascade:
-    1. Gemini Flash -> 2. Groq Cloud (Fast LPUs) -> 3. OpenRouter Fallback
+    1. Reads RAG prompt template and AI system instructions from the database prior to API calls.
+    2. Builds RAG augmented prompt with database template.
+    3. Multi-provider cascade: Gemini -> Groq -> Mistral -> OpenRouter.
     """
-    user_prompt = build_rag_augmented_prompt(candidate_text, job_description)
+    # 1. Read RAG & AI instructions from database before API call
+    system_instruction, rag_prompt_template = await get_active_ai_instruction(db)
+    logger.info("[AI Evaluator] Loaded active RAG & AI instructions from database before API dispatch.")
 
-    # 1. Try Primary: Gemini
+    user_prompt = build_rag_augmented_prompt(
+        candidate_text, job_description, rag_template=rag_prompt_template
+    )
+
+    # 2. Try Primary: Gemini
     try:
-        gemini_result = await _call_gemini(user_prompt)
+        gemini_result = await _call_gemini(user_prompt, system_instruction=system_instruction)
         if isinstance(gemini_result, tuple):
             raw_json, model_name = gemini_result
             provider_tag = f"google/{model_name}"
@@ -340,7 +411,7 @@ async def evaluate_candidate_with_fallback(
         logger.warning(
             f"Primary provider (Gemini) failed/throttled: {gemini_err}. Failing over to Groq...")
 
-    # 2. Try Secondary: Groq Cloud (Fast LPUs)
+    # 3. Try Secondary: Groq Cloud (Fast LPUs)
     for groq_model in ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "llama-3.1-8b-instant", "llama3-70b-8192"]:
         try:
             raw_json = await _call_openai_compatible_provider(
@@ -348,6 +419,7 @@ async def evaluate_candidate_with_fallback(
                 api_key=settings.GROQ_API_KEY,
                 model_name=groq_model,
                 prompt=user_prompt,
+                system_instruction=system_instruction,
             )
             cleaned_json = _clean_json_string(raw_json)
             validated = CandidateEvaluationResult.model_validate_json(cleaned_json)
@@ -357,10 +429,30 @@ async def evaluate_candidate_with_fallback(
                 logger.info(f"Groq {groq_model} not accessible, attempting fallback...")
                 continue
             logger.warning(
-                f"Secondary provider (Groq {groq_model}) failed/throttled: {groq_err}. Failing over to OpenRouter...")
+                f"Secondary provider (Groq {groq_model}) failed/throttled: {groq_err}. Failing over to Mistral/OpenRouter...")
             break
 
-    # 3. Try Tertiary: OpenRouter Fallback
+    # 4. Try Mistral AI (Free Tier / Experiment Plan: mistral-small-latest, open-mistral-nemo, open-mistral-7b)
+    if settings.MISTRAL_API_KEY and settings.MISTRAL_API_KEY.strip():
+        for mistral_model in ["mistral-small-latest", "open-mistral-nemo", "open-mistral-7b"]:
+            try:
+                raw_json = await _call_openai_compatible_provider(
+                    base_url="https://api.mistral.ai/v1",
+                    api_key=settings.MISTRAL_API_KEY,
+                    model_name=mistral_model,
+                    prompt=user_prompt,
+                    system_instruction=system_instruction,
+                )
+                cleaned_json = _clean_json_string(raw_json)
+                validated = CandidateEvaluationResult.model_validate_json(cleaned_json)
+                return validated, f"mistral/{mistral_model}"
+            except Exception as mistral_err:
+                logger.warning(
+                    f"Mistral AI model {mistral_model} failed/throttled: {mistral_err}. Continuing cascade..."
+                )
+                continue
+
+    # 5. Try Quaternary: OpenRouter Free Models Pool Fallback
     for or_model in ["meta-llama/llama-3.1-8b-instruct:free", "meta-llama/llama-3.1-8b-instruct", "meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free"]:
         try:
             raw_json = await _call_openai_compatible_provider(
@@ -368,6 +460,7 @@ async def evaluate_candidate_with_fallback(
                 api_key=settings.OPENROUTER_API_KEY,
                 model_name=or_model,
                 prompt=user_prompt,
+                system_instruction=system_instruction,
             )
             cleaned_json = _clean_json_string(raw_json)
             validated = CandidateEvaluationResult.model_validate_json(cleaned_json)

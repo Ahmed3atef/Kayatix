@@ -61,6 +61,9 @@ function formatProviderBadge(provider) {
     if (p.includes('groq')) {
         return `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace"><i class="bi bi-lightning-charge-fill me-1"></i>${provider}</span>`;
     }
+    if (p.includes('mistral')) {
+        return `<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace"><i class="bi bi-fire me-1"></i>${provider}</span>`;
+    }
     if (p.includes('openrouter')) {
         return `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace"><i class="bi bi-cpu-fill me-1"></i>${provider}</span>`;
     }
@@ -124,15 +127,21 @@ function buildEvaluationCardHTML(apiData) {
         </div>
     `).join('') || '<div class="text-muted small">No questions generated.</div>';
 
+    const extractionBadge = apiData.extraction_method === 'mistral_ocr'
+        ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace"><i class="bi bi-file-earmark-text me-1"></i>Mistral AI OCR</span>'
+        : '<span class="badge bg-secondary-subtle text-secondary border font-monospace"><i class="bi bi-file-earmark-pdf me-1"></i>Standard Parser</span>';
+
     return `
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-3">
             <div class="card-header border-bottom p-3 d-flex justify-content-between align-items-center">
                 <div>
                     <h5 class="fw-bold mb-0 text-body-emphasis">${res.candidate_name || "Candidate Evaluation"}</h5>
-                    <div class="d-flex align-items-center gap-2 small text-muted mt-1">
+                    <div class="d-flex align-items-center gap-2 small text-muted mt-1 flex-wrap">
                         <span><i class="bi bi-briefcase me-1"></i> ${res.estimated_years_experience} YOE</span>
                         <span>&bull;</span>
-                        <span>Provider: ${formatProviderBadge(provider)}</span>
+                        <span>Parser: ${extractionBadge}</span>
+                        <span>&bull;</span>
+                        <span>AI Provider: ${formatProviderBadge(provider)}</span>
                         <span>&bull;</span>
                         <span>${isCached ? '<span class="badge bg-success-subtle text-success"><i class="bi bi-check2"></i> Cache Hit</span>' : '<span class="badge bg-primary-subtle text-primary">Live Evaluated</span>'}</span>
                     </div>
