@@ -145,3 +145,34 @@ async def test_footer_ai_provider_indicators(client):
     assert 'id="footerBadgeOpenRouter" class="badge bg-secondary-subtle text-secondary' in html
 
 
+@pytest.mark.asyncio
+async def test_social_media_meta_tags_and_banner(client):
+    """Verifies that OpenGraph, Twitter Cards, social sharing dropdown, and banner assets are rendered properly."""
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    html = resp.text
+
+    # OpenGraph tags
+    assert '<meta property="og:type" content="website">' in html
+    assert '<meta property="og:site_name" content="Kayatix | A.Y.A.T. Engine">' in html
+    assert 'static/img/kayatix-banner.png' in html
+    assert '<meta property="og:image:width" content="1376">' in html
+
+    # Twitter card tags
+    assert '<meta name="twitter:card" content="summary_large_image">' in html
+
+    # Social share links
+    assert "linkedin.com/sharing/share-offsite" in html
+    assert "twitter.com/intent/tweet" in html
+    assert "api.whatsapp.com/send" in html
+
+    # Hero showcase card
+    assert "Kayatix &bull; A.Y.A.T. Engine" in html
+
+    # Static banner endpoint returns valid image
+    banner_resp = await client.get("/static/img/kayatix-banner.png")
+    assert banner_resp.status_code == 200
+    assert banner_resp.headers["content-type"] in ["image/png", "image/jpeg"]
+
+
+
