@@ -75,6 +75,21 @@ def render_markdown_to_html(content: str) -> str:
         # Add Bootstrap table classes
         html = html.replace("<table>", '<div class="table-responsive my-3"><table class="table table-bordered table-hover">')
         html = html.replace("</table>", '</table></div>')
+
+        # Transform Mermaid diagram code blocks to .mermaid-container for visual rendering
+        import html as html_lib
+
+        def _replace_mermaid(match):
+            raw_code = match.group(1).strip()
+            clean_code = html_lib.unescape(raw_code)
+            escaped_attr = html_lib.escape(clean_code, quote=True)
+            return (
+                f'<div class="mermaid-container my-4 text-center p-3 bg-body-tertiary rounded-4 border shadow-sm overflow-auto" data-original-code="{escaped_attr}">\n'
+                f'  <div class="mermaid-diagram text-center">{html_lib.escape(clean_code)}</div>\n'
+                f'</div>'
+            )
+
+        html = re.sub(r'<pre><code class="language-mermaid">([\s\S]*?)</code></pre>', _replace_mermaid, html)
         return html
     except Exception as e:
         import html as html_lib

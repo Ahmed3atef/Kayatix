@@ -44,20 +44,27 @@
                             <span><i class="bi bi-calendar3 me-1"></i> Evaluated: {{ record.created_at.strftime('%Y-%m-%d %H:%M UTC') if record.created_at else 'N/A' }}</span>
                         </div>
                     </div>
-                    <div class="text-md-end">
-                        {% if record.match_score >= 80 %}
-                        <div class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-5 rounded-pill">
-                            <i class="bi bi-check-circle-fill me-1"></i> {{ record.match_score }}% Match (Strong Fit)
+                    <div class="text-md-end d-flex flex-column align-items-md-end gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-md-end">
+                            {% if record.match_score >= 80 %}
+                            <div class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-5 rounded-pill">
+                                <i class="bi bi-check-circle-fill me-1"></i> {{ record.match_score }}% Match
+                            </div>
+                            {% elif record.match_score >= 60 %}
+                            <div class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 fs-5 rounded-pill">
+                                <i class="bi bi-exclamation-circle-fill me-1"></i> {{ record.match_score }}% Match
+                            </div>
+                            {% else %}
+                            <div class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-5 rounded-pill">
+                                <i class="bi bi-x-circle-fill me-1"></i> {{ record.match_score }}% Match
+                            </div>
+                            {% endif %}
+
+                            {% set rec = analysis.hiring_recommendation or ('Strong Hire' if record.match_score >= 85 else ('Proceed (Technical Screen)' if record.match_score >= 70 else ('Borderline (Phone Screen First)' if record.match_score >= 50 else 'Reject / Not Recommended'))) %}
+                            <div class="badge {% if 'Strong' in rec %}bg-success{% elif 'Proceed' in rec %}bg-primary{% elif 'Borderline' in rec %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2 fs-7 rounded-pill">
+                                <i class="bi bi-person-check me-1"></i> {{ rec }}
+                            </div>
                         </div>
-                        {% elif record.match_score >= 60 %}
-                        <div class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 fs-5 rounded-pill">
-                            <i class="bi bi-exclamation-circle-fill me-1"></i> {{ record.match_score }}% Match (Moderate)
-                        </div>
-                        {% else %}
-                        <div class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-5 rounded-pill">
-                            <i class="bi bi-x-circle-fill me-1"></i> {{ record.match_score }}% Match (Low Fit)
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>

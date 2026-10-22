@@ -9,15 +9,15 @@ Welcome to **Kayatix**, the **A.Y.A.T. Engine** (*Automated Yield for Applicant 
 ## 🎯 Core Capabilities
 
 1. **Resume Screener (`/screener`)**:
-   - Accepts candidate PDF resumes and LinkedIn "Save to PDF" exports.
-   - Cleans and normalizes text, stripping token waste.
-   - Directly feeds content into real Cloud LLMs (Gemini / Groq / Ollama Cloud) for merit-based scoring (0-100%).
-   - Generates 5–7 tailored technical and behavioral interview questions targeting verified gaps.
+   - Accepts candidate PDF resumes, scanned documents, and LinkedIn exports.
+   - Evaluates profiles using a **calibrated 100-point Senior HR Bar Raiser rubric** (Core Competency, Seniority, STAR Impact, System Design, and Stability).
+   - Generates an executive hiring verdict (`[STRONG HIRE]`, `[PROCEED]`, `[BORDERLINE]`, `[REJECT]`).
+   - Produces 5–7 tailored technical and behavioral interview questions with expected candidate answers.
 
 2. **Portfolio Analyzer (`/portfolio`)**:
-   - Supports candidate personal websites, portfolios, blogs, and GitHub profiles.
-   - Fully supports modern Single-Page Applications (Next.js `__NEXT_DATA__`, React, Vue, client-side JS bundles).
-   - Provides a fallback text box for private or protected portfolios.
+   - Evaluates candidate personal websites, portfolios, blogs, and GitHub profiles.
+   - Extracts production project evidence from modern Single-Page Applications (Next.js, React, Vue, OpenGraph metadata).
+   - Includes a direct text fallback for login-protected or pure canvas portfolios.
 
 3. **Legal LinkedIn X-Ray Sourcing (`/sourcing`)**:
    - Leverages Google Custom Search JSON API to locate publicly indexed candidate profiles on LinkedIn.

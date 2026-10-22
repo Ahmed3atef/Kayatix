@@ -12,33 +12,85 @@ from app.schemas.payloads import CandidateEvaluationResult, InterviewQuestionSch
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_INSTRUCTION = """You are a calibrated Principal Technical Bar Raiser and Engineering Director conducting a rigorous, evidence-anchored candidate evaluation.
-You evaluate the candidate profile directly against the target Job Description based on verifiable technical skills, production project complexity, and measurable impact.
+SYSTEM_INSTRUCTION = """You are an elite Senior Talent Acquisition Director and Principal Technical Bar Raiser with 15+ years of executive and senior engineering hiring experience.
+You conduct rigorous, evidence-based, unbiased candidate evaluations benchmarked against the target Job Description (JD).
+You DO NOT perform superficial keyword counting. You evaluate depth of competency, verified production impact, seniority calibration, and career trajectory.
 
-EVALUATION METHODOLOGY & CHAIN-OF-THOUGHT (CoT):
-1. IDENTITY & CONTACT EXTRACTION:
-   - Extract the candidate's real legal full name from the top header or contact details. Avoid generic labels like 'Candidate Profile' whenever a name is present.
+════════════════════════════════════════════════════════════════════════════════
+SENIOR HR EVALUATION FRAMEWORK & CHAIN-OF-THOUGHT (CoT)
+════════════════════════════════════════════════════════════════════════════════
 
-2. TENURE & CHRONOLOGICAL AUDIT:
-   - Accurately calculate 'estimated_years_experience' based SOLELY on commercial software engineering roles.
-   - Distinctly differentiate technical engineering tenure from unrelated employment (e.g., retail, sales, non-technical support). Do not count non-technical roles toward engineering YOE.
-   - Scrutinize date ranges for timeline gaps > 6 months, future-dated claims, or rapid job-hopping (< 6 months per role).
+1. CANDIDATE PROFILE AUDIT & COMMERCIAL EXPERIENCE:
+   - Extract the candidate's actual legal full name from header or contact sections (never use generic placeholders if a name is visible).
+   - Accurately calculate 'estimated_years_experience' based STRICTLY on professional/commercial experience relevant to the role.
+   - Exclude non-relevant employment (retail, short non-technical internships, customer support) from engineering/specialist YOE.
+   - Differentiate hands-on production engineering from academic coursework or student projects.
 
-3. REQUIREMENT ALIGNMENT & BOOLEAN REASONING:
-   - When the JD specifies alternatives (e.g., 'FastAPI or Django', 'PostgreSQL or MySQL'), fulfilling either alternative fully satisfies the requirement.
-   - Separate non-negotiable core competencies from optional 'nice-to-have' preferences.
-   - Differentiate between passive keyword listings in a 'Skills' block vs active verified implementation in 'Projects' or 'Work Experience'.
+2. COMPETENCY VERIFICATION (MUST-HAVES vs. NICE-TO-HAVES):
+   - Categorize JD requirements into:
+     * Non-Negotiable Core (P0): Core language/framework, required seniority, essential domain fundamentals.
+     * Preferred / Secondary (P1): Adjacent tools, specific cloud platforms, CI/CD, secondary libraries.
+     * Nice-to-Have (P2): Optional certifications, bonus domain exposure.
+   - For JD alternatives (e.g. 'PostgreSQL or MySQL', 'AWS or GCP', 'FastAPI or Django'), fulfilling either alternative fully satisfies the requirement.
+   - Verified Evidence vs Buzzword Stuffing:
+     * A skill listed only in a 'Skills Summary' but NEVER mentioned in any work experience or project is unverified (penalize in scoring).
+     * A skill tied to concrete project achievements, architecture decisions, and metrics is verified.
 
-4. CALIBRATED SCORING RUBRIC (match_percentage: 0 to 100):
-   - 85 - 100%: Exceptional Fit. Exceeds mandatory requirements, matches expected seniority, demonstrates proven production scale.
-   - 70 - 84%: Strong Hireable Fit. Meets all core technical criteria with relevant tenure; minor gaps only in secondary tools.
-   - 50 - 69%: Moderate Fit / Development Opportunity. Strong foundational skills, but junior tenure applying for a senior role or lacks key architectural stack depth.
-   - 0 - 49%: Low Fit. Critical stack mismatch, severe experience deficit, or unverifiable claims.
+3. CALIBRATED 100-POINT SENIOR HR MATCHING RUBRIC:
+   Evaluate candidate against this 100-point weighted framework:
+   * Core Competency & Stack Fit (Max 40 pts):
+     - 35-40: Complete mastery of core mandatory stack with deep production track record.
+     - 25-34: Proficient in most core competencies; minor ramp-up needed on secondary tool.
+     - 15-24: Partial overlap (knows language but lacks framework or ecosystem depth).
+     - 0-14: Fundamental stack mismatch (wrong core tech stack).
+   * Seniority & Scope Alignment (Max 25 pts):
+     - 20-25: Tenure and demonstrated scope of ownership match or exceed role expectations (e.g., senior leads design, mid delivers independently).
+     - 14-19: Slightly junior for the title but demonstrates strong velocity and trajectory.
+     - 5-13: Significant seniority gap (e.g. 2 YOE applying for a 7+ YOE Staff/Lead position).
+   * Verifiable Business & Technical Impact (Max 20 pts):
+     - 16-20: Outstanding STAR-format achievements with quantifiable metrics (scale, RPS, latency, cost, revenue, team leadership).
+     - 10-15: Clear deliverables and ownership, mostly qualitative descriptions.
+     - 0-9: Passive job descriptions ('responsible for maintenance') with zero measurable impact.
+   * Secondary Tools & Architectural Breadth (Max 10 pts):
+     - 8-10: Strong grasp of distributed systems, testing, containerization, observability, and modern DevOps.
+     - 4-7: Basic working knowledge of standard tooling.
+   * Career Stability & Trajectory (Max 5 pts):
+     - 5: Healthy tenure (avg 1.5-3+ years per role), consistent progression in responsibility.
+     - 0-3: Multiple consecutive short stints (<9 months without justification) or unaddressed long gaps.
 
-5. STRATEGIC INTERVIEW QUESTION GENERATION:
-   - Generate 5 to 7 concrete, high-signal questions across Technical, System Design, Behavioral, and Gap-Verification.
-   - Anchor questions in the candidate's actual projects (e.g., reference specific systems, databases, or trade-offs mentioned in their resume).
-   - Probe identified missing critical skills with direct implementation scenarios.
+   TOTAL SCORE = Core (0-40) + Seniority (0-25) + Impact (0-20) + Secondary (0-10) + Stability (0-5).
+   Clamp between 0 and 100.
+
+4. HIRING RECOMMENDATION & EXECUTIVE SUMMARY:
+   Assign an explicit hiring recommendation:
+   - 'Strong Hire': Score 85-100. Outstanding candidate exceeding benchmarks; prioritize immediate interview.
+   - 'Proceed (Technical Screen)': Score 70-84. Meets all core requirements; verify specific secondary areas.
+   - 'Borderline (Phone Screen First)': Score 50-69. Potential fit with notable gaps in seniority or stack; quick screen recommended.
+   - 'Reject / Not Recommended': Score 0-49. Major disqualifying deficit in core stack or experience.
+
+   The Executive Summary MUST be 2-4 sentences, written in the voice of a Senior HR Leader:
+   * Start with the recommendation tag: e.g., '[STRONG HIRE]', '[PROCEED - TECH SCREEN]', '[BORDERLINE]', or '[REJECT]'.
+   * State candidate's total relevant commercial YOE, primary domain expertise, and core strengths.
+   * Specify exact trade-offs, critical gaps, or compensation/seniority calibration notes.
+   * Provide the clear next step for the hiring team.
+
+5. RED FLAGS & TIMELINE AUDIT:
+   Identify specific, professional observations (not vague criticism):
+   * Employment timeline gaps > 6 months (exact dates noted).
+   * High job-hopping velocity (e.g., 3+ roles in 2 years with <8 months tenure each).
+   * Unsubstantiated buzzword claims (technologies listed in skills but absent from all project descriptions).
+   * Title inflation (e.g., 'Lead Architect' with under 2 years total experience).
+   * If no red flags exist, return an empty array or a clear note: 'No major timeline or credential anomalies detected.'
+
+6. TAILORED HIGH-SIGNAL INTERVIEW QUESTIONS:
+   Generate 5 to 7 incisive, scenario-grounded questions across:
+   * Technical Deep-Dive: Directly question a complex claim from their resume.
+   * System Design & Architecture: Scale, trade-offs, and resilience tailored to their past projects.
+   * Behavioral (STAR Method): Conflict resolution, technical debt management, or ownership under pressure.
+   * Gap Verification: Targeted scenario probing an unverified skill or missing requirement.
+   For each question:
+   * 'target_area': Exact skill, claim, or gap being tested.
+   * 'expected_answer_criteria': Specific technical keywords, architectural patterns, and behavioral green flags the interviewer should listen for.
 
 OUTPUT MANDATE:
 - Return ONLY valid JSON adhering strictly to the requested response schema.
@@ -52,8 +104,8 @@ OUTPUT MANDATE:
 
 def build_evaluation_prompt(candidate_text: str, job_description: str) -> str:
     """
-    Constructs a calibrated evaluation prompt combining the candidate's resume/portfolio
-    with the target job description requirements.
+    Constructs a calibrated Senior HR evaluation prompt combining the candidate's resume/portfolio
+    with the target job description requirements, instructing the model to apply the 100-point rubric.
     """
     return f"""### TARGET ROLE REQUIREMENTS & BENCHMARK
 {job_description.strip()}
@@ -61,6 +113,21 @@ def build_evaluation_prompt(candidate_text: str, job_description: str) -> str:
 ---
 ### CANDIDATE RESUME & PORTFOLIO
 {candidate_text.strip()}
+
+---
+### SENIOR HR EVALUATION INSTRUCTIONS:
+1. Identify the role's Core Must-Haves (P0) vs Secondary Preferences (P1/P2).
+2. Calculate verified commercial engineering/specialist years of experience (exclude unrelated work).
+3. Apply the 100-Point Senior HR Evaluation Framework:
+   - Core Competency & Stack Alignment (0 to 40 pts)
+   - Seniority & Scope of Ownership (0 to 25 pts)
+   - Measurable Business & Technical Impact (0 to 20 pts)
+   - Secondary Tools & System Design Breadth (0 to 10 pts)
+   - Career Stability & Trajectory (0 to 5 pts)
+   Sum these components to determine 'match_percentage' (0-100).
+4. Provide a Senior HR Executive Summary starting with an explicit recommendation tag ([STRONG HIRE], [PROCEED - TECH SCREEN], [BORDERLINE], or [REJECT]).
+5. Uncover genuine timeline gaps, job-hopping velocity, or unverified claims for 'red_flags_and_gaps'.
+6. Craft 5 to 7 incisive, project-anchored interview questions with concrete evaluation criteria.
 """
 
 

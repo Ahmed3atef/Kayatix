@@ -74,13 +74,24 @@ function buildEvaluationCardHTML(apiData) {
     const provider = apiData.provider_used;
 
     let scoreBadge = '';
-    if (res.match_percentage >= 80) {
-        scoreBadge = `<span class="badge bg-success fs-5 px-3 py-2 rounded-pill"><i class="bi bi-check-circle-fill me-1"></i> ${res.match_percentage}% Strong Fit</span>`;
-    } else if (res.match_percentage >= 60) {
-        scoreBadge = `<span class="badge bg-warning text-dark fs-5 px-3 py-2 rounded-pill"><i class="bi bi-exclamation-circle-fill me-1"></i> ${res.match_percentage}% Moderate Fit</span>`;
+    if (res.match_percentage >= 85) {
+        scoreBadge = `<span class="badge bg-success fs-5 px-3 py-2 rounded-pill"><i class="bi bi-check-circle-fill me-1"></i> ${res.match_percentage}% Match</span>`;
+    } else if (res.match_percentage >= 70) {
+        scoreBadge = `<span class="badge bg-primary fs-5 px-3 py-2 rounded-pill"><i class="bi bi-check-circle-fill me-1"></i> ${res.match_percentage}% Match</span>`;
+    } else if (res.match_percentage >= 50) {
+        scoreBadge = `<span class="badge bg-warning text-dark fs-5 px-3 py-2 rounded-pill"><i class="bi bi-exclamation-circle-fill me-1"></i> ${res.match_percentage}% Match</span>`;
     } else {
-        scoreBadge = `<span class="badge bg-danger fs-5 px-3 py-2 rounded-pill"><i class="bi bi-x-circle-fill me-1"></i> ${res.match_percentage}% Low Fit</span>`;
+        scoreBadge = `<span class="badge bg-danger fs-5 px-3 py-2 rounded-pill"><i class="bi bi-x-circle-fill me-1"></i> ${res.match_percentage}% Match</span>`;
     }
+
+    const rec = res.hiring_recommendation || (res.match_percentage >= 85 ? 'Strong Hire' : (res.match_percentage >= 70 ? 'Proceed (Technical Screen)' : (res.match_percentage >= 50 ? 'Borderline (Phone Screen First)' : 'Reject / Not Recommended')));
+    let recClass = 'bg-secondary';
+    if (rec.includes('Strong')) recClass = 'bg-success-subtle text-success border border-success-subtle';
+    else if (rec.includes('Proceed')) recClass = 'bg-primary-subtle text-primary border border-primary-subtle';
+    else if (rec.includes('Borderline')) recClass = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+    else if (rec.includes('Reject')) recClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+
+    const recBadge = `<span class="badge ${recClass} fs-7 px-3 py-2 rounded-pill"><i class="bi bi-person-check me-1"></i>${rec}</span>`;
 
     const matchedSkills = res.matched_skills.map(s => `<span class="badge bg-success-subtle text-success border border-success-subtle me-1 mb-1">${s}</span>`).join('') || '<span class="text-muted small">None verified</span>';
     const missingSkills = res.missing_critical_skills.map(s => `<span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1 mb-1">${s}</span>`).join('') || '<span class="text-success small">None</span>';
@@ -151,7 +162,7 @@ function buildEvaluationCardHTML(apiData) {
                         <span>${isCached ? '<span class="badge bg-success-subtle text-success"><i class="bi bi-check2"></i> Cache Hit</span>' : '<span class="badge bg-primary-subtle text-primary">Live Evaluated</span>'}</span>
                     </div>
                 </div>
-                <div>${scoreBadge}</div>
+                <div class="d-flex align-items-center flex-wrap gap-2 justify-content-end">${scoreBadge}${recBadge}</div>
             </div>
             <div class="card-body p-3">
                 <div class="mb-3">

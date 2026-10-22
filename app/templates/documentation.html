@@ -6,6 +6,8 @@
 <!-- Highlight.js for code syntax highlighting -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+<!-- Mermaid.js for interactive diagrams -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
 <style>
     .docs-sidebar {
         position: sticky;
@@ -70,6 +72,16 @@
     }
     .docs-nav-link:hover {
         background-color: var(--bs-tertiary-bg);
+    }
+    .mermaid-container {
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+        min-height: 80px;
+    }
+    .mermaid-container svg {
+        max-width: 100% !important;
+        height: auto !important;
+        margin: 0 auto;
+        display: block;
     }
 </style>
 {% endblock %}
@@ -178,14 +190,76 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Syntax highlight all code blocks if highlight.js is loaded
+    // 1. Mermaid.js Diagram Rendering & Theme Synchronization
+    async function renderMermaidCharts() {
+        if (typeof mermaid === 'undefined') return;
+
+        const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: isDark ? 'dark' : 'default',
+            securityLevel: 'loose',
+            fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        // Convert any raw unprocessed pre code.language-mermaid to .mermaid-container
+        document.querySelectorAll('pre code.language-mermaid, pre code.mermaid').forEach((codeEl) => {
+            const preEl = codeEl.closest('pre');
+            if (!preEl) return;
+            const rawCode = codeEl.textContent.trim();
+            if (!rawCode) return;
+
+            const container = document.createElement('div');
+            container.className = 'mermaid-container my-4 text-center p-3 bg-body-tertiary rounded-4 border shadow-sm overflow-auto';
+            container.setAttribute('data-original-code', rawCode);
+            container.innerHTML = `<div class="mermaid-diagram text-center"></div>`;
+            preEl.parentNode.replaceChild(container, preEl);
+        });
+
+        // Render all .mermaid-container elements
+        const containers = document.querySelectorAll('.mermaid-container');
+        for (let i = 0; i < containers.length; i++) {
+            const container = containers[i];
+            const rawCode = container.getAttribute('data-original-code');
+            if (!rawCode) continue;
+
+            const uniqueId = 'mermaid-chart-' + i + '-' + Math.random().toString(36).substring(2, 8);
+            try {
+                const { svg } = await mermaid.render(uniqueId, rawCode);
+                container.innerHTML = svg;
+            } catch (err) {
+                console.warn('[Mermaid] Rendering error on diagram ' + i, err);
+                container.innerHTML = `<div class="alert alert-warning text-start small mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Diagram rendering warning. <pre class="font-monospace mt-2 mb-0"><code>${rawCode}</code></pre></div>`;
+            }
+        }
+    }
+
+    // Initial render of all Mermaid charts
+    renderMermaidCharts();
+
+    // Re-render Mermaid charts dynamically whenever user switches Light / Dark theme
+    const themeObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            if (m.type === 'attributes' && m.attributeName === 'data-bs-theme') {
+                renderMermaidCharts();
+            }
+        }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+    // 2. Syntax highlight all standard code blocks (excluding mermaid blocks)
     if (typeof hljs !== 'undefined') {
-        document.querySelectorAll('pre code').forEach((block) => {
+        document.querySelectorAll('pre code:not(.language-mermaid):not(.mermaid)').forEach((block) => {
             hljs.highlightElement(block);
         });
     }
 
-    // 2. Real-time Sidebar Section Filtering
+    // 3. Real-time Sidebar Section Filtering
     const searchInput = document.getElementById('docSearchInput');
     const sectionsList = document.getElementById('docSectionsList');
     if (searchInput && sectionsList) {

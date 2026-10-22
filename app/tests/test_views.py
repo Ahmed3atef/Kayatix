@@ -116,6 +116,16 @@ async def test_documentation_page_by_slug(client):
 
 
 @pytest.mark.asyncio
+async def test_documentation_mermaid_rendering(client):
+    """Verifies that documentation pages containing Mermaid blocks are converted to .mermaid-container."""
+    response = await client.get("/documentation/02-database-setup")
+    assert response.status_code == 200
+    assert "mermaid-container" in response.text
+    assert "data-original-code" in response.text
+    assert "flowchart TD" in response.text
+
+
+@pytest.mark.asyncio
 async def test_footer_ai_provider_indicators(client):
     """Verifies that footer priority pills render green when keys are active and found."""
     from app.core.config import settings
