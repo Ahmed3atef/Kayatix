@@ -1,6 +1,6 @@
 # Candidate Evaluation & Extraction
 
-Kayatix automates the technical vetting and screening process for engineering and knowledge roles using Retrieval-Augmented Generation (RAG) and multi-provider Cloud LLMs.
+Kayatix automates the technical vetting and screening process for engineering and knowledge roles using multi-provider Cloud LLMs with calibrated full-context reasoning.
 
 ---
 

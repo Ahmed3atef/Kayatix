@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 import logging
 import os
 from pathlib import Path
@@ -17,7 +18,7 @@ from app.core.database import (
     DEFAULT_SQLITE_URL,
     normalize_database_url,
 )
-from app.models.domain import AIInstruction, JobTemplate, UserSettings
+from app.models import JobTemplate, UserSettings, utc_now
 from app.schemas.payloads import (
     AppDefaultsSchema,
     DatabaseValidationResponse,
@@ -28,8 +29,6 @@ from app.schemas.payloads import (
     JobTemplateSchema,
     JobTemplateUpdateRequest,
     ProviderValidationStatus,
-    RAGAIInstructionResponse,
-    RAGAIInstructionSchema,
     SettingsValidationResponse,
     SystemSettingsDefaultsSchema,
     UserSettingsResponse,
@@ -38,35 +37,85 @@ from app.schemas.payloads import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULTS_FILE_PATH = Path(__file__).resolve().parent.parent / "core" / "default_job_templates.json"
-FALLBACK_DEFAULTS_FILE_PATH = Path(__file__).resolve().parent.parent / "core" / "defaults.json"
-RAG_INSTRUCTIONS_FILE_PATH = Path(__file__).resolve().parent.parent / "core" / "rag_ai_instructions.json"
+FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
+JOB_FIXTURE_PATH = FIXTURES_DIR / "job_template.json"
+USER_SETTINGS_FIXTURE_PATH = FIXTURES_DIR / "user_settings.json"
+FRAPPE_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+FRAPPE_DOCTYPES_DIR = FRAPPE_MODELS_DIR
 
 
 def get_defaults_file_path() -> Path:
-    """Returns absolute path to default_job_templates.json configuration file."""
-    if DEFAULTS_FILE_PATH.exists():
-        return DEFAULTS_FILE_PATH
-    if FALLBACK_DEFAULTS_FILE_PATH.exists():
-        return FALLBACK_DEFAULTS_FILE_PATH
-    return DEFAULTS_FILE_PATH
-
-
-def get_rag_instructions_file_path() -> Path:
-    """Returns absolute path to rag_ai_instructions.json configuration file."""
-    return RAG_INSTRUCTIONS_FILE_PATH
+    """Returns path to the primary job template fixture."""
+    return JOB_FIXTURE_PATH
 
 
 def load_default_settings_schema() -> AppDefaultsSchema:
-    """Loads the application default settings and job templates from default_job_templates.json schema."""
-    path = get_defaults_file_path()
-    if path.exists():
+    """Loads application defaults and job templates directly from fixtures/job_template.json and fixtures/user_settings.json."""
+    modified_ts = "2026-10-16T19:00:00Z"
+    templates_list: List[JobTemplateSchema] = []
+    sys_settings = SystemSettingsDefaultsSchema(
+        project_name="Kayatix - A.Y.A.T. Engine",
+        version="1.0.0",
+        subscription_tier="standard",
+        evaluation_mode="llm_cascade",
+        rate_limit_rpm=15,
+    )
+
+    # 1. Load job templates fixture
+    if JOB_FIXTURE_PATH.exists():
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-                return AppDefaultsSchema.model_validate_json(content)
+            with open(JOB_FIXTURE_PATH, "r", encoding="utf-8") as f:
+                job_raw = json.load(f)
+                if isinstance(job_raw, dict):
+                    modified_ts = job_raw.get("modified_timestamp", modified_ts)
+                    raw_items = job_raw.get("data", [])
+                elif isinstance(job_raw, list):
+                    raw_items = job_raw
+                else:
+                    raw_items = []
+                for item in raw_items:
+                    templates_list.append(
+                        JobTemplateSchema(
+                            title=item.get("title", ""),
+                            category=item.get("category", "General"),
+                            description=item.get("description", ""),
+                        )
+                    )
         except Exception as e:
-            logger.error(f"[DefaultsSchema] Error reading {path}: {e}. Falling back to standard defaults.")
+            logger.error(f"[DefaultsSchema] Error reading {JOB_FIXTURE_PATH}: {e}")
+
+    # 2. Load user settings fixture
+    if USER_SETTINGS_FIXTURE_PATH.exists():
+        try:
+            with open(USER_SETTINGS_FIXTURE_PATH, "r", encoding="utf-8") as f:
+                settings_raw = json.load(f)
+                settings_item = settings_raw[0] if isinstance(settings_raw, list) and settings_raw else settings_raw
+                if isinstance(settings_item, dict):
+                    sys_settings = SystemSettingsDefaultsSchema(
+                        project_name=settings_item.get("project_name", "Kayatix - A.Y.A.T. Engine"),
+                        version=settings_item.get("version", "1.0.0"),
+                        subscription_tier=settings_item.get("subscription_tier", "standard"),
+                        evaluation_mode=settings_item.get("evaluation_mode", "llm_cascade"),
+                        rate_limit_rpm=settings_item.get("rate_limit_rpm", 15),
+                    )
+        except Exception as e:
+            logger.error(f"[DefaultsSchema] Error reading {USER_SETTINGS_FIXTURE_PATH}: {e}")
+
+    if not templates_list:
+        fallback = AppDefaultsSchema(
+            version="1.0.0",
+            modified_timestamp=modified_ts,
+            system_settings=sys_settings,
+            job_templates=[],
+        )
+        return fallback
+
+    return AppDefaultsSchema(
+        version="1.0.0",
+        modified_timestamp=modified_ts,
+        system_settings=sys_settings,
+        job_templates=templates_list,
+    )
 
     fallback = AppDefaultsSchema(
         version="1.0.0",
@@ -173,116 +222,94 @@ def load_default_settings_schema() -> AppDefaultsSchema:
 
 
 def save_default_settings_schema(data: AppDefaultsSchema) -> None:
-    """Saves the default settings schema to default_job_templates.json."""
-    path = get_defaults_file_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(data.model_dump_json(indent=2))
+    """Saves default templates to fixtures/job_template.json and system settings to fixtures/user_settings.json."""
+    FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 1. Save job templates fixture
+    job_payload = {
+        "doctype": "Job Template",
+        "modified_timestamp": data.modified_timestamp,
+        "data": [
+            {
+                "doctype": "Job Template",
+                "title": t.title,
+                "category": t.category,
+                "description": t.description,
+            }
+            for t in data.job_templates
+        ],
+    }
+    with open(JOB_FIXTURE_PATH, "w", encoding="utf-8") as f:
+        json.dump(job_payload, f, indent=2)
+
+    # 2. Save user settings fixture
+    settings_payload = [
+        {
+            "doctype": "User Settings",
+            "project_name": data.system_settings.project_name,
+            "version": data.system_settings.version,
+            "subscription_tier": data.system_settings.subscription_tier,
+            "evaluation_mode": data.system_settings.evaluation_mode,
+            "rate_limit_rpm": data.system_settings.rate_limit_rpm,
+        }
+    ]
+    with open(USER_SETTINGS_FIXTURE_PATH, "w", encoding="utf-8") as f:
+        json.dump(settings_payload, f, indent=2)
 
 
-def get_defaults_json_schema() -> dict:
-    """Returns the official JSON Schema for defaults configuration."""
+def get_frappe_doctype_schema(doctype_name: str = "job_template") -> dict:
+    """
+    Returns the schema specification for the specified model
+    derived directly from the SQLAlchemy model class.
+    """
+    from app.models import Candidate, EvaluationCache, Job, JobTemplate, User, UserSettings
+
+    mapping = {
+        "job_template": JobTemplate,
+        "user_settings": UserSettings,
+        "user": User,
+        "job": Job,
+        "candidate": Candidate,
+        "candidate_evaluation": EvaluationCache,
+    }
+    normalized_name = doctype_name.lower().strip().replace(" ", "_").replace("-", "_")
+    model = mapping.get(normalized_name)
+    if model:
+        fields = []
+        for col in model.__table__.columns:
+            fields.append({
+                "fieldname": col.name,
+                "fieldtype": str(col.type),
+                "label": col.name.replace("_", " ").title(),
+                "primary_key": col.primary_key,
+                "nullable": col.nullable,
+            })
+        name_map = {
+            "job_template": "Job Template",
+            "user_settings": "User Settings",
+            "user": "User",
+            "job": "Job",
+            "candidate": "Candidate",
+            "candidate_evaluation": "Candidate Evaluation",
+        }
+        res = {
+            "doctype": "DocType",
+            "name": name_map.get(normalized_name, model.__name__),
+            "table_name": model.__tablename__,
+            "field_order": [c.name for c in model.__table__.columns],
+            "fields": fields,
+        }
+        if model is UserSettings:
+            res["issingle"] = 1
+        return res
+
     return AppDefaultsSchema.model_json_schema()
 
 
-DEFAULT_SYSTEM_INSTRUCTION = """You are a calibrated Principal Technical Bar Raiser and Engineering Director conducting a rigorous, evidence-anchored candidate evaluation.
-You evaluate the candidate profile using Retrieval-Augmented Generation (RAG) evidence segments extracted from their resume/portfolio against the target Job Description.
 
-EVALUATION METHODOLOGY & CHAIN-OF-THOUGHT (CoT):
-1. IDENTITY & CONTACT EXTRACTION:
-   - Extract the candidate's real legal full name from the top header or contact details. Avoid generic labels like 'Candidate Profile' whenever a name is present.
-
-2. TENURE & CHRONOLOGICAL AUDIT:
-   - Accurately calculate 'estimated_years_experience' based SOLELY on commercial software engineering roles.
-   - Distinctly differentiate technical engineering tenure from unrelated employment (e.g., retail, sales, non-technical support). Do not count non-technical roles toward engineering YOE.
-   - Scrutinize date ranges for timeline gaps > 6 months, future-dated claims, or rapid job-hopping (< 6 months per role).
-
-3. REQUIREMENT ALIGNMENT & BOOLEAN REASONING:
-   - When the JD specifies alternatives (e.g., 'FastAPI or Django', 'PostgreSQL or MySQL'), fulfilling either alternative fully satisfies the requirement.
-   - Separate non-negotiable core competencies from optional 'nice-to-have' preferences.
-   - Differentiate between passive keyword listings in a 'Skills' block vs active verified implementation in 'Projects' or 'Work Experience'.
-
-4. CALIBRATED SCORING RUBRIC (match_percentage: 0 to 100):
-   - 85 - 100%: Exceptional Fit. Exceeds mandatory requirements, matches expected seniority, demonstrates proven production scale.
-   - 70 - 84%: Strong Hireable Fit. Meets all core technical criteria with relevant tenure; minor gaps only in secondary tools.
-   - 50 - 69%: Moderate Fit / Development Opportunity. Strong foundational skills, but junior tenure applying for a senior role or lacks key architectural stack depth.
-   - 0 - 49%: Low Fit. Critical stack mismatch, severe experience deficit, or unverifiable claims.
-
-5. STRATEGIC INTERVIEW QUESTION GENERATION:
-   - Generate 5 to 7 concrete, high-signal questions across Technical, System Design, Behavioral, and Gap-Verification.
-   - Anchor questions in the candidate's actual projects (e.g., reference specific systems, databases, or trade-offs mentioned in their resume).
-   - Probe identified missing critical skills with direct implementation scenarios.
-
-OUTPUT MANDATE:
-- Return ONLY valid JSON adhering strictly to the requested response schema.
-- No conversational prelude, no markdown wrapping, no hallucinated competencies."""
-
-DEFAULT_RAG_PROMPT_TEMPLATE = """### TARGET ROLE REQUIREMENTS & BENCHMARK
-[Core Mandatory Qualifications & Stack]:
-{core_requirements}
-
-[Preferred / Secondary Skills]:
-{nice_to_haves}
-
-[Role Scope & Responsibilities]:
-{responsibilities}
-
----
-### RAG RETRIEVED CANDIDATE EVIDENCE MATRIX
-[Candidate Skills & Tools Chunk]:
-{technical_skills}
-
-[Professional Experience & Tenures Chunk]:
-{professional_experience}
-
-[Key Projects & Engineering Artifacts Chunk]:
-{engineering_projects}
-
-[Education & Credentials Chunk]:
-{education_certifications}
-
----
-### FULL CANDIDATE VERBATIM PROVENANCE
-{candidate_text}
-"""
-
-
-def load_rag_ai_instructions_schema() -> RAGAIInstructionSchema:
-    """Loads RAG prompt template and AI system instruction from rag_ai_instructions.json."""
-    path = get_rag_instructions_file_path()
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-                return RAGAIInstructionSchema.model_validate_json(content)
-        except Exception as e:
-            logger.error(f"[RAGAIInstructions] Error reading {path}: {e}. Using built-in instructions.")
-
-    fallback = RAGAIInstructionSchema(
-        name="default_evaluator",
-        description="Calibrated Principal Technical Bar Raiser candidate evaluation with RAG evidence matrix",
-        modified_timestamp="2026-10-16T19:00:00Z",
-        system_instruction=DEFAULT_SYSTEM_INSTRUCTION,
-        rag_prompt_template=DEFAULT_RAG_PROMPT_TEMPLATE,
-    )
-    try:
-        save_rag_ai_instructions_schema(fallback)
-    except Exception:
-        pass
-    return fallback
-
-
-def save_rag_ai_instructions_schema(data: RAGAIInstructionSchema) -> None:
-    """Saves RAG prompt template and AI system instruction to rag_ai_instructions.json."""
-    path = get_rag_instructions_file_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(data.model_dump_json(indent=2))
-
-
-def get_rag_ai_instructions_json_schema() -> dict:
-    """Returns the official JSON Schema for RAG AI instructions."""
-    return RAGAIInstructionSchema.model_json_schema()
+def get_defaults_json_schema() -> dict:
+    """Returns the official Frappe DocType JSON Schema for job template defaults."""
+    return get_frappe_doctype_schema("job_template")
 
 
 # Default out-of-the-box configuration loaded from schema
@@ -468,24 +495,24 @@ async def _ensure_schema_columns_exist(db: AsyncSession, force: bool = False):
         except Exception as e:
             logger.warning(f"[Database Migration] Adding job_templates_schema_timestamp skipped/failed: {e}")
 
-    # 4. ai_instructions table
-    if not await _table_exists(db, "ai_instructions"):
+    # 4. Clean up deprecated ai_instructions table if present from legacy installs
+    if await _table_exists(db, "ai_instructions"):
+        try:
+            await db.execute(text("DROP TABLE IF EXISTS ai_instructions"))
+            await db.commit()
+            logger.info("[Database Migration] Dropped deprecated ai_instructions table.")
+        except Exception as e:
+            logger.warning(f"[Database Migration] Cleanup of ai_instructions table skipped: {e}")
+
+    # 5. Ensure users table exists
+    if not await _table_exists(db, "users"):
         try:
             from app.core.database import Base, engine
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            logger.info("[Database Migration] Initialized ai_instructions table.")
+            logger.info("[Database Migration] Initialized users table.")
         except Exception as e:
-            logger.warning(f"[Database Migration] Initializing ai_instructions table skipped/failed: {e}")
-
-    # 5. modified_timestamp column in ai_instructions
-    if await _table_exists(db, "ai_instructions") and not await _column_exists(db, "ai_instructions", "modified_timestamp"):
-        try:
-            await db.execute(text("ALTER TABLE ai_instructions ADD COLUMN modified_timestamp VARCHAR(50)"))
-            await db.commit()
-            logger.info("[Database Migration] Added modified_timestamp column to ai_instructions table.")
-        except Exception as e:
-            logger.warning(f"[Database Migration] Adding modified_timestamp column skipped/failed: {e}")
+            logger.warning(f"[Database Migration] Initializing users table skipped/failed: {e}")
 
     _schema_ensured = True
 
@@ -1064,96 +1091,10 @@ def get_default_job_templates() -> List[dict]:
     return [t.model_dump() for t in load_default_settings_schema().job_templates]
 
 
-async def sync_ai_instructions_to_database(
-    db: AsyncSession, force: bool = False, commit: bool = True
-) -> AIInstruction:
-    """
-    Synchronizes RAG & AI instructions from rag_ai_instructions.json into the active database.
-    Checks modified_timestamp: if the JSON file's modified_timestamp changed from the database record,
-    it synchronizes the updated instructions into the database.
-    """
-    await _ensure_schema_columns_exist(db)
-    schema = load_rag_ai_instructions_schema()
-
-    stmt = select(AIInstruction).where(AIInstruction.name == schema.name)
-    result = await db.execute(stmt)
-    existing = result.scalar_one_or_none()
-
-    from app.models.domain import utc_now
-
-    if not existing:
-        inst = AIInstruction(
-            name=schema.name,
-            description=schema.description,
-            system_instruction=schema.system_instruction,
-            rag_prompt_template=schema.rag_prompt_template,
-            modified_timestamp=schema.modified_timestamp,
-        )
-        db.add(inst)
-        if commit:
-            await db.commit()
-            await db.refresh(inst)
-        logger.info(f"[AI Instructions Sync] Initialized AIInstruction '{schema.name}' in database (timestamp: {schema.modified_timestamp}).")
-        return inst
-
-    # Check if modified_timestamp or content changed
-    timestamp_changed = existing.modified_timestamp != schema.modified_timestamp
-    content_changed = (
-        existing.system_instruction != schema.system_instruction or
-        existing.rag_prompt_template != schema.rag_prompt_template or
-        existing.description != schema.description
-    )
-
-    if force or timestamp_changed or content_changed:
-        logger.info(
-            f"[AI Instructions Sync] Detected modified instructions (timestamp changed: {timestamp_changed}, "
-            f"content changed: {content_changed}). Syncing into database..."
-        )
-        existing.system_instruction = schema.system_instruction
-        existing.rag_prompt_template = schema.rag_prompt_template
-        existing.description = schema.description
-        existing.modified_timestamp = schema.modified_timestamp
-        existing.updated_at = utc_now()
-        if commit:
-            await db.commit()
-            await db.refresh(existing)
-    else:
-        logger.info(f"[AI Instructions Sync] AI instructions '{schema.name}' are up to date in database (timestamp: {existing.modified_timestamp}).")
-
-    return existing
-
-
-async def sync_ai_instruction_to_json_file(db: AsyncSession) -> RAGAIInstructionSchema:
-    """
-    Reverse sync: Reads AIInstruction from the database, updates modified_timestamp to current UTC,
-    and updates rag_ai_instructions.json.
-    """
-    stmt = select(AIInstruction).where(AIInstruction.name == "default_evaluator")
-    result = await db.execute(stmt)
-    inst = result.scalar_one_or_none()
-    if not inst:
-        return load_rag_ai_instructions_schema()
-
-    new_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    inst.modified_timestamp = new_timestamp
-    await db.commit()
-
-    schema = RAGAIInstructionSchema(
-        name=inst.name,
-        description=inst.description,
-        modified_timestamp=new_timestamp,
-        system_instruction=inst.system_instruction,
-        rag_prompt_template=inst.rag_prompt_template,
-    )
-    save_rag_ai_instructions_schema(schema)
-    logger.info(f"[AI Instructions Reverse Sync] Synchronized database instructions into rag_ai_instructions.json (new timestamp: {new_timestamp}).")
-    return schema
-
-
 async def sync_job_templates_to_json_file(db: AsyncSession) -> AppDefaultsSchema:
     """
     Reverse sync: Reads JobTemplates and UserSettings from database,
-    updates modified_timestamp to current UTC, and updates default_job_templates.json.
+    updates modified_timestamp to current UTC, and updates fixtures/job_template.json and fixtures/user_settings.json.
     """
     new_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     templates = await get_all_job_templates(db)
@@ -1181,7 +1122,7 @@ async def sync_job_templates_to_json_file(db: AsyncSession) -> AppDefaultsSchema
         ],
     )
     save_default_settings_schema(schema)
-    logger.info(f"[Job Templates Reverse Sync] Synchronized database templates into default_job_templates.json (new timestamp: {new_timestamp}).")
+    logger.info(f"[Job Templates Reverse Sync] Synchronized database templates into fixtures/job_template.json and fixtures/user_settings.json (new timestamp: {new_timestamp}).")
     return schema
 
 
@@ -1190,7 +1131,6 @@ async def sync_global_defaults(db: AsyncSession, force: bool = False) -> Default
     Performs global insertion and synchronization of JSON settings schema into the active database.
     - Compares modified_timestamp: if the schema timestamp changed from the database, it syncs updates.
     - If default templates or settings are missing, inserts them.
-    - Syncs RAG and AI instructions from rag_ai_instructions.json.
     - Preserves user-created custom templates and API credentials.
     """
     await _ensure_schema_columns_exist(db)
@@ -1242,7 +1182,6 @@ async def sync_global_defaults(db: AsyncSession, force: bool = False) -> Default
                 changed = True
 
             if changed or force or timestamp_changed:
-                from app.models.domain import utc_now
                 existing_t.category = item_cat
                 existing_t.description = item_desc
                 existing_t.updated_at = utc_now()
@@ -1276,9 +1215,6 @@ async def sync_global_defaults(db: AsyncSession, force: bool = False) -> Default
         record.job_templates_schema_timestamp = schema.modified_timestamp
         settings_synced = True
 
-    # 3. Sync RAG & AI Instructions
-    await sync_ai_instructions_to_database(db, force=force, commit=False)
-
     await db.commit()
     await db.refresh(record)
 
@@ -1292,7 +1228,7 @@ async def sync_global_defaults(db: AsyncSession, force: bool = False) -> Default
         templates_updated=updated,
         templates_unchanged=unchanged,
         settings_synced=settings_synced,
-        instructions_synced=True,
+        instructions_synced=False,
         message=msg,
     )
 

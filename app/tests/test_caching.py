@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy import select
 from app.api.v1.endpoints_evaluation import _process_and_cache_evaluation
-from app.models.domain import EvaluationCache
+from app.models import EvaluationCache
 from app.services.ai_engine import compute_request_hash
 
 

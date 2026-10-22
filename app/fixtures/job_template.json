@@ -1,40 +1,39 @@
 {
-  "version": "1.0.0",
+  "doctype": "Job Template",
   "modified_timestamp": "2026-10-16T19:00:00Z",
-  "system_settings": {
-    "project_name": "Kayatix - A.Y.A.T. Engine",
-    "version": "1.0.0",
-    "subscription_tier": "standard",
-    "evaluation_mode": "llm_cascade",
-    "rate_limit_rpm": 15
-  },
-  "job_templates": [
+  "data": [
     {
+      "doctype": "Job Template",
       "title": "FastAPI Backend Engineer",
       "category": "Engineering",
       "description": "Job Title: Senior FastAPI Backend Engineer\nLocation: Remote / Hybrid\nRequirements:\n- 5+ years experience building production backends with Python & FastAPI\n- Deep proficiency with SQLAlchemy async ORM, PostgreSQL schema design, and query optimization\n- Experience building microservices, Docker containerization, and REST API standards\n- Hands-on experience with asynchronous rate-limiting, circuit-breakers, and caching architectures (Redis/SQLite)\n- Strong understanding of unit testing with pytest and async fixtures."
     },
     {
+      "doctype": "Job Template",
       "title": "Full Stack Python / React",
       "category": "Engineering",
       "description": "Job Title: Full Stack Software Engineer (Python & React)\nLocation: Remote\nRequirements:\n- 4+ years of professional full-stack development experience\n- Python, FastAPI or Django on the backend\n- Modern React, TypeScript, and TailwindCSS or Bootstrap 5 on the frontend\n- Experience integrating third-party APIs, OAuth, and LLM providers\n- Strong database knowledge (PostgreSQL, SQLite)."
     },
     {
+      "doctype": "Job Template",
       "title": "DevOps & Cloud Platform",
       "category": "Engineering",
       "description": "Job Title: Cloud & DevOps Platform Engineer\nLocation: Remote / Hybrid\nRequirements:\n- 5+ years managing Linux infrastructure and cloud environments (AWS/GCP/Azure)\n- Extensive hands-on experience with Docker, Kubernetes, and Helm\n- CI/CD automation pipelines (GitHub Actions, GitLab CI)\n- Infrastructure as Code (Terraform)\n- Python or Bash scripting for system automation."
     },
     {
+      "doctype": "Job Template",
       "title": "Talent Acquisition & HR Lead",
       "category": "Human Resources",
       "description": "Job Title: Senior Talent Acquisition Specialist & HR Lead\nLocation: Remote / On-site\nRequirements:\n- 5+ years of full-cycle technical recruiting and HR talent intelligence experience\n- Demonstrated track record sourcing candidates via Boolean search, LinkedIn X-Ray, and developer communities\n- Experience with Applicant Tracking Systems (ATS) and candidate evaluation benchmarking\n- Strong competency in structured behavioral interviews and merit-based talent screening\n- Excellent stakeholder communication and compensation negotiation skills."
     },
     {
+      "doctype": "Job Template",
       "title": "Growth Marketing Manager",
       "category": "Marketing",
       "description": "Job Title: Growth & Digital Marketing Manager\nLocation: Remote / Hybrid\nRequirements:\n- 4+ years experience in B2B SaaS growth marketing, SEO, and paid acquisition\n- Proven track record increasing conversion rates (CRO) and MRR with quantified pipeline growth\n- Deep proficiency with Google Analytics 4, HubSpot, Mixpanel, and SEMrush\n- Hands-on experience running multi-channel campaigns (LinkedIn Ads, Google Search, Email nurturing)\n- Strong data analysis skills (SQL or Python a plus) to measure CAC, LTV, and retention."
     },
     {
+      "doctype": "Job Template",
       "title": "Financial Analyst & Controller",
       "category": "Finance",
       "description": "Job Title: Senior Financial Analyst & Corporate Controller\nLocation: Hybrid / On-site\nRequirements:\n- 5+ years of financial planning & analysis (FP&A), budget forecasting, and corporate reporting\n- Advanced financial modeling in Excel, Power BI, and ERP systems (SAP/NetSuite)\n- CPA or CFA qualification preferred; strong knowledge of US GAAP / IFRS standards\n- Demonstrated success in cost optimization, margin expansion, and audit defense\n- Experience presenting quarterly board decks and capital allocation models."

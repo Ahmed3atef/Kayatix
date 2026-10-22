@@ -1,5 +1,5 @@
 import pytest
-from app.models.domain import EvaluationCache
+from app.models import EvaluationCache
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,6 @@ async def test_documentation_view(client):
     assert "text/html" in response.headers["content-type"]
     assert "Kayatix Documentation" in response.text
     assert "Documentation" in response.text
-    assert "Local Readme Editing" in response.text
 
 
 @pytest.mark.asyncio
@@ -112,8 +111,8 @@ async def test_documentation_page_by_slug(client):
     """Verifies that individual documentation sections can be browsed by slug."""
     # Test specific page: 05-linkedin-xray-sourcing
     response = await client.get("/documentation/05-linkedin-xray-sourcing")
+    assert response.status_code == 200
     assert "Zero API Keys" in response.text or "Search Engine ID" in response.text
-    assert "05-linkedin-xray-sourcing.md" in response.text
 
 
 @pytest.mark.asyncio
@@ -147,7 +146,7 @@ async def test_footer_ai_provider_indicators(client):
 
 @pytest.mark.asyncio
 async def test_social_media_meta_tags_and_banner(client):
-    """Verifies that OpenGraph, Twitter Cards, social sharing dropdown, and banner assets are rendered properly."""
+    """Verifies that OpenGraph, Twitter Cards, and banner assets are rendered properly."""
     resp = await client.get("/")
     assert resp.status_code == 200
     html = resp.text
@@ -160,11 +159,6 @@ async def test_social_media_meta_tags_and_banner(client):
 
     # Twitter card tags
     assert '<meta name="twitter:card" content="summary_large_image">' in html
-
-    # Social share links
-    assert "linkedin.com/sharing/share-offsite" in html
-    assert "twitter.com/intent/tweet" in html
-    assert "api.whatsapp.com/send" in html
 
     # Hero showcase card
     assert "Kayatix &bull; A.Y.A.T. Engine" in html

@@ -253,7 +253,7 @@ def test_resolve_database_url_hierarchy(tmp_path, monkeypatch):
 async def test_get_or_create_user_settings_reads_existing_or_creates_defaults(db_session):
     """Verifies that get_or_create_user_settings reads existing DB record if present, or creates defaults if missing."""
     from app.services.settings_service import get_or_create_user_settings
-    from app.models.domain import UserSettings
+    from app.models import UserSettings
     from sqlalchemy import select, delete
 
     # Ensure clean state in test DB

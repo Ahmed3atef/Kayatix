@@ -61,8 +61,8 @@
     - **Cloud LLM Cascade**: Full end-to-end multi-provider LLM processing.
 - **100% Legal Candidate Sourcing (Zero Account Bans)**:
     - **Google X-Ray Search Engine**: Discovers public LinkedIn profiles via Google X-Ray Dorking with zero authenticated requests to LinkedIn servers. Features embedded zero-key CSE widget support and 1-Click direct Google search.
-- **RAG Architecture & Grounded Chain-of-Thought Prompting**:
-    - Preprocesses candidates through a 3-stage RAG pipeline (semantic chunking of skills, tenures, projects, and credentials).
+- **Full-Context Direct Evaluation & Grounded Chain-of-Thought Prompting**:
+    - Direct full-context evaluation ensures zero context loss, preserving complete career chronology, tenure integrity, and project scope.
     - Uses 5-stage Chain-of-Thought reasoning to audit genuine commercial software experience, respect Boolean alternatives (*"FastAPI or Django"*), calibrate 0-100 scores, and anchor interview questions in real candidate projects.
 - **Deep Portfolio & Personal Website Analysis**: Asynchronously scrapes and strips boilerplate from candidate personal blogs, technical portfolios, and GitHub readmes using `httpx` and `trafilatura` with client-side SPA bundle discovery.
 - **High Availability Multi-Provider AI Failover**:

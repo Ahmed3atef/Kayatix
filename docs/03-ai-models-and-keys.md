@@ -1,6 +1,6 @@
-# AI Models, Multi-Provider Cascade & RAG Architecture
+# AI Models, Multi-Provider Cascade & Evaluation Architecture
 
-Kayatix is powered by real, state-of-the-art Cloud Large Language Models configured with native structured output JSON validation, Retrieval-Augmented Generation (RAG), and calibrated Chain-of-Thought (CoT) reasoning. It never falls back to primitive regex heuristic analyzers for candidate scoring.
+Kayatix is powered by real, state-of-the-art Cloud Large Language Models configured with native structured output JSON validation, direct full-context evaluation, and calibrated Chain-of-Thought (CoT) reasoning. It never falls back to primitive regex heuristic analyzers for candidate scoring.
 
 ---
 
@@ -13,8 +13,8 @@ flowchart TD
     CV["Candidate Resume (PDF)"] --> SingleShot["Single-Shot Multimodal Vision (Gemini 2.5 Flash)"]
     SingleShot -- "Success (50% token & latency savings)" --> Result["Structured JSON Evaluation"]
     SingleShot -- "Fallback / Rate Limit" --> OCR["Tier 1: Gemini Vision OCR / Tier 2: LlamaParse / Tier 3: pypdf (Local)"]
-    OCR --> RAG["RAG Evidence Matrix Chunking"]
-    RAG --> P1["1. Google Gemini Flash (Primary)"]
+    OCR --> Prompt["Calibrated Full-Context Prompting"]
+    Prompt --> P1["1. Google Gemini Flash (Primary)"]
     P1 -- "Success" --> Result
     P1 -- "429 Quota / 503 Spike / Error" --> P2["2. Groq Cloud LPUs (Secondary)"]
     P2 -- "Success" --> Result
@@ -24,26 +24,15 @@ flowchart TD
 
 ---
 
-## 🧠 Retrieval-Augmented Generation (RAG) Pipeline
+## 🧠 Direct Full-Context Evaluation Architecture
 
-Kayatix enhances model precision and eliminates hallucinations by passing candidate profiles through a 3-stage RAG preprocessing pipeline in `app/services/ai_engine.py`:
+Kayatix delivers superior candidate assessment without vector slicing or lossy chunking:
 
-### Stage 1: Semantic Document Chunking (`segment_candidate_profile`)
-Parses unstructured PDF and portfolio text into distinct functional sectors:
-* `technical_skills`: Languages, frameworks, databases, cloud tools.
-* `professional_experience`: Chronological tenures, titles, company dates.
-* `engineering_projects`: Architected systems, scale metrics, deliverables.
-* `education_certifications`: Degrees, accredited courses, credentials.
-* `candidate_summary`: Header bio, headline, contact information.
-
-### Stage 2: Target Requirement Decomposition (`extract_jd_core_facets`)
-Analyzes the target Job Description to isolate:
-* `core_requirements`: Non-negotiable mandatory stack competencies.
-* `nice_to_haves`: Preferred or bonus secondary skills.
-* `responsibilities`: Architectural scope, delivery expectations.
-
-### Stage 3: Grounded Evidence Matrix (`build_rag_augmented_prompt`)
-Synthesizes the extracted chunks into a structured evidence benchmark paired with verbatim provenance, ensuring every score is anchored in verified resume evidence.
+### Full-Document Provenance & Chronological Integrity
+Because candidate resumes and portfolios fit comfortably within modern large language model context windows (128k to 1M+ tokens), Kayatix passes the complete document in-context:
+* **Preserves Career Trajectory**: Unlike chunk-based retrieval which can separate job titles from their dates and metrics, the full-context approach enables the model to see chronological progression and cumulative tenure.
+* **Exact Gap Detection**: Detects career transitions exceeding 6 months without heuristic loss.
+* **Boolean Alternative Fulfillment**: Evaluates skill trade-offs (e.g. *"FastAPI or Django"*) within complete project context.
 
 ---
 

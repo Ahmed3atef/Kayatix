@@ -12,7 +12,7 @@
                     <i class="bi bi-arrow-left"></i> Back to History
                 </a>
                 <h3 class="fw-bold mb-1">Candidate Evaluation Report</h3>
-                <p class="text-muted small mb-0">Record ID: #{{ record.id }} &bull; Source: <span class="badge bg-secondary-subtle text-secondary">{{ record.source_type }}</span> &bull; SHA-256 Hash: <code class="small">{{ record.request_hash[:16] }}...</code></p>
+                <p class="text-muted small mb-0">Record ID: #{{ record.id }} &bull; Source: <span class="badge bg-secondary-subtle text-secondary">{% if record.source_type == 'pdf_resume' %}Resume PDF{% else %}Portfolio{% endif %}</span></p>
             </div>
             <div>
                 <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1" onclick="window.print()">

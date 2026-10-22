@@ -8,7 +8,7 @@ from sqlalchemy import select
 from pydantic import HttpUrl
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.domain import EvaluationCache
+from app.models import EvaluationCache
 from app.schemas.payloads import EvaluationAPIResponse, CandidateEvaluationResult
 from app.services.ai_evaluator import evaluate_candidate_pipeline
 from app.services.scraper_service import scrape_candidate_portfolio

@@ -88,6 +88,13 @@
                             <i class="bi bi-clock-history"></i> <span>History</span>
                         </a>
                     </li>
+                    {% if current_user and current_user.is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link text-nowrap {% if request.url.path == '/users' %}active{% endif %}" href="/users">
+                            <i class="bi bi-people-fill text-warning"></i> <span>Users</span>
+                        </a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link text-nowrap {% if request.url.path.startswith('/documentation') %}active{% endif %}" href="/documentation">
                             <i class="bi bi-book"></i> <span>Docs</span>
@@ -96,47 +103,65 @@
                 </ul>
 
                 <div class="d-flex align-items-center gap-2 text-nowrap pt-2 pt-lg-0">
-                    <!-- Social Share Dropdown -->
+                    <a href="/settings" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1 {% if request.url.path == '/settings' %}active{% endif %}">
+                        <i class="bi bi-gear-fill"></i> <span>Settings</span>
+                    </a>
+
+                    <!-- User Account / Auth Dropdown -->
+                    {% if current_user %}
                     <div class="dropdown">
-                        <button class="btn btn-outline-light btn-sm dropdown-toggle d-flex align-items-center gap-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Share Kayatix on Social Media">
-                            <i class="bi bi-share-fill"></i> <span class="d-none d-sm-inline">Share</span>
+                        <button class="btn btn-outline-light btn-sm dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="badge {% if current_user.is_admin %}bg-danger{% elif current_user.role == 'recruiter' %}bg-primary{% else %}bg-secondary{% endif %} rounded-circle p-1">
+                                <i class="bi bi-person-fill"></i>
+                            </span>
+                            <span class="d-none d-md-inline text-truncate" style="max-width: 140px;">{{ current_user.full_name or current_user.email }}</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                            <li><h6 class="dropdown-header text-uppercase fs-8 fw-bold">Share Platform</h6></li>
                             <li>
-                                <a class="dropdown-item d-flex align-items-center gap-2" href="https://www.linkedin.com/sharing/share-offsite/?url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-linkedin text-primary"></i> <span>LinkedIn</span>
+                                <div class="px-3 py-1">
+                                    <div class="fw-bold small text-truncate" style="max-width: 200px;">{{ current_user.full_name or 'User' }}</div>
+                                    <div class="text-muted fs-8 text-truncate" style="max-width: 200px;">{{ current_user.email }}</div>
+                                    <div class="mt-1">
+                                        {% if current_user.is_admin %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-8">Administrator</span>
+                                        {% elif current_user.role == 'recruiter' %}
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-8">Recruiter</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle fs-8">Member</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% if current_user.is_admin %}
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2" href="/users">
+                                    <i class="bi bi-people text-primary"></i> <span>User Management</span>
                                 </a>
                             </li>
+                            {% endif %}
                             <li>
-                                <a class="dropdown-item d-flex align-items-center gap-2" href="https://twitter.com/intent/tweet?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20%26%20Sourcing%20Engine' | urlencode }}&url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-twitter-x"></i> <span>X (Twitter)</span>
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item d-flex align-items-center gap-2" href="https://api.whatsapp.com/send?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20%26%20Sourcing%20Engine%20' | urlencode }}{{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-whatsapp text-success"></i> <span>WhatsApp</span>
+                                <a class="dropdown-item d-flex align-items-center gap-2" href="/settings">
+                                    <i class="bi bi-gear text-secondary"></i> <span>Platform Settings</span>
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <button class="dropdown-item d-flex align-items-center gap-2" type="button" onclick="navigator.clipboard.writeText(window.location.href).then(() => { if (typeof showToast === 'function') { showToast('Page link copied to clipboard!'); } else { alert('Page link copied to clipboard!'); } })">
-                                    <i class="bi bi-link-45deg text-info"></i> <span>Copy Page Link</span>
-                                </button>
+                                <a class="dropdown-item d-flex align-items-center gap-2 text-danger" href="/logout">
+                                    <i class="bi bi-box-arrow-right"></i> <span>Sign Out</span>
+                                </a>
                             </li>
                         </ul>
                     </div>
+                    {% else %}
+                    <a href="/login" class="btn btn-primary btn-sm d-flex align-items-center gap-1 shadow-sm">
+                        <i class="bi bi-box-arrow-in-right"></i> <span>Sign In</span>
+                    </a>
+                    <a href="/signup" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1">
+                        <i class="bi bi-person-plus"></i> <span class="d-none d-sm-inline">Sign Up</span>
+                    </a>
+                    {% endif %}
 
-                    <a href="https://github.com/Ahmed3atef/Kayatix.git" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1" title="GitHub Repository">
-                        <i class="bi bi-github"></i>
-                    </a>
-
-                    <a href="/settings" class="btn btn-outline-light btn-sm d-flex align-items-center gap-1 {% if request.url.path == '/settings' %}active{% endif %}">
-                        <i class="bi bi-gear-fill"></i> <span>Settings</span>
-                    </a>
-                    <a href="/docs" target="_blank" class="btn btn-outline-info btn-sm d-flex align-items-center gap-1">
-                        <i class="bi bi-file-code"></i> <span>API Docs</span>
-                    </a>
                     <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center" id="themeToggleBtn" title="Toggle Light/Dark Theme" style="width: 32px; height: 32px; padding: 0;">
                         <i class="bi bi-moon-stars" id="themeIcon"></i>
                     </button>
@@ -171,11 +196,9 @@
                 <div>
                     <strong>Kayatix | A.Y.A.T. Engine</strong> &mdash; <em>Automated Yield for Applicant &amp; Talent</em> &copy; 2026. Built with FastAPI, Pydantic V2 &amp; Multi-Provider AI Fallback.
                 </div>
-                <div class="d-inline-flex align-items-center gap-2 border-start ps-3">
-                    <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="Share on LinkedIn"><i class="bi bi-linkedin fs-6"></i></a>
-                    <a href="https://twitter.com/intent/tweet?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20Engine' | urlencode }}&url={{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="Share on X (Twitter)"><i class="bi bi-twitter-x fs-6"></i></a>
-                    <a href="https://api.whatsapp.com/send?text={{ 'Discover%20Kayatix%20-%20AI%20Talent%20Intelligence%20Engine%20' | urlencode }}{{ request.url | string | urlencode }}" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="Share on WhatsApp"><i class="bi bi-whatsapp fs-6"></i></a>
-                    <a href="https://github.com/Ahmed3atef/Kayatix.git" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none" title="GitHub Repository"><i class="bi bi-github fs-6"></i></a>
+                <div class="d-inline-flex align-items-center gap-3 border-start ps-3">
+                    <a href="/docs" target="_blank" class="text-secondary text-decoration-none small" title="Interactive API Documentation"><i class="bi bi-file-code me-1"></i>API Docs</a>
+                    <a href="https://github.com/Ahmed3atef/Kayatix.git" target="_blank" rel="noopener noreferrer" class="text-secondary text-decoration-none small" title="GitHub Repository"><i class="bi bi-github me-1"></i>GitHub</a>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2 mt-2 mt-md-0" id="aiProviderFooterBadges">

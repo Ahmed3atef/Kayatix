@@ -14,7 +14,9 @@ os.environ["GOOGLE_CSE_CX_ID"] = "mock_cse_cx"
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
+from app.models.user import User
 from app.schemas.payloads import CandidateEvaluationResult, InterviewQuestionSchema
+from app.services.auth_service import create_access_token
 
 # Test in-memory SQLite engine
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -53,8 +55,25 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
+    # Create a default test admin user
+    test_user = User(
+        email="test_admin@kayatix.local",
+        role="admin",
+        is_admin=True,
+        is_active=True,
+        full_name="Test Administrator",
+    )
+    test_user.set_password("AdminPass123!")
+    db_session.add(test_user)
+    await db_session.commit()
+    await db_session.refresh(test_user)
+
+    token = create_access_token({"sub": str(test_user.id), "email": test_user.email, "role": test_user.role})
+
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    cookies = {"kayatix_token": token}
+    headers = {"Authorization": f"Bearer {token}"}
+    async with AsyncClient(transport=transport, base_url="http://test", cookies=cookies, headers=headers) as ac:
         yield ac
 
     app.dependency_overrides.clear()

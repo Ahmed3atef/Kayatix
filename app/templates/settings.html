@@ -203,11 +203,11 @@
                                     <div class="col-md-6">
                                         <label for="subscriptionTier" class="form-label fw-semibold">Subscription Tier</label>
                                         <select class="form-select" id="subscriptionTier">
-                                            <option value="standard" {% if settings.subscription_tier == 'standard' or settings.subscription_tier == 'free' %}selected{% endif %}>Standard Developer Tier</option>
-                                            <option value="pro" {% if settings.subscription_tier == 'pro' %}selected{% endif %}>Pro Developer Tier (Higher Concurrency)</option>
-                                            <option value="enterprise" {% if settings.subscription_tier == 'enterprise' %}selected{% endif %}>Enterprise Tier (Custom Limits)</option>
+                                            <option value="standard" {% if settings.subscription_tier == 'standard' or settings.subscription_tier == 'free' %}selected{% endif %}>Standard Tier</option>
+                                            <option value="pro" {% if settings.subscription_tier == 'pro' %}selected{% endif %}>Pro Tier (High Concurrency)</option>
+                                            <option value="enterprise" {% if settings.subscription_tier == 'enterprise' %}selected{% endif %}>Enterprise Tier</option>
                                         </select>
-                                        <div class="form-text">Controls rate limit scheduling and SHA-256 caching policies.</div>
+                                        <div class="form-text">Controls rate limit scheduling and evaluation caching policies.</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label for="rateLimitRpm" class="form-label fw-semibold">Requests Per Minute (RPM) Ceiling</label>
@@ -241,8 +241,8 @@
                                 <p class="text-muted small mb-0">Configure standard role requirements and technical benchmarks used by the Resume Screener and Portfolio Analyzer.</p>
                             </div>
                             <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="syncSchemaDefaultsBtn" title="Sync database templates and system defaults with latest JSON schema">
-                                    <i class="bi bi-arrow-repeat"></i> Sync Schema
+                                <button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="syncSchemaDefaultsBtn" title="Sync database templates with system standard presets">
+                                    <i class="bi bi-arrow-repeat"></i> Sync Presets
                                 </button>
                                 <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="resetTemplatesBtn">
                                     <i class="bi bi-arrow-counterclockwise"></i> Reset Defaults
@@ -777,7 +777,7 @@
             showToast('Failed to sync schema: ' + err.message, 'danger');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Schema';
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Presets';
         }
     });
 </script>

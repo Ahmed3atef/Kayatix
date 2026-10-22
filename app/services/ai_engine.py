@@ -13,7 +13,7 @@ from app.schemas.payloads import CandidateEvaluationResult, InterviewQuestionSch
 logger = logging.getLogger(__name__)
 
 SYSTEM_INSTRUCTION = """You are a calibrated Principal Technical Bar Raiser and Engineering Director conducting a rigorous, evidence-anchored candidate evaluation.
-You evaluate the candidate profile using Retrieval-Augmented Generation (RAG) evidence segments extracted from their resume/portfolio against the target Job Description.
+You evaluate the candidate profile directly against the target Job Description based on verifiable technical skills, production project complexity, and measurable impact.
 
 EVALUATION METHODOLOGY & CHAIN-OF-THOUGHT (CoT):
 1. IDENTITY & CONTACT EXTRACTION:
@@ -47,192 +47,22 @@ OUTPUT MANDATE:
 
 
 # ==============================================================================
-# RETRIEVAL-AUGMENTED GENERATION (RAG) CONTEXT EXTRACTION & CHUNKING
+# EVALUATION PROMPT CONSTRUCTION
 # ==============================================================================
 
-def segment_candidate_profile(raw_text: str) -> dict[str, str]:
+def build_evaluation_prompt(candidate_text: str, job_description: str) -> str:
     """
-    RAG Stage 1 - Semantic Document Chunking:
-    Parses unstructured resume / portfolio text into categorized functional blocks:
-    - technical_skills: Programming languages, frameworks, DBs, cloud tools
-    - professional_experience: Roles, company tenures, chronological dates
-    - engineering_projects: Architected systems, metrics, repositories
-    - education_certifications: Academic credentials, courses, degrees
-    - candidate_summary: Bio, headline, contact info
+    Constructs a calibrated evaluation prompt combining the candidate's resume/portfolio
+    with the target job description requirements.
     """
-    sections: dict[str, list[str]] = {
-        "candidate_summary": [],
-        "technical_skills": [],
-        "professional_experience": [],
-        "engineering_projects": [],
-        "education_certifications": [],
-    }
-    current_section = "candidate_summary"
-
-    for line in raw_text.splitlines():
-        trimmed = line.strip()
-        if not trimmed:
-            continue
-
-        clean_heading = re.sub(r"[^a-zA-Z\s]", "", trimmed).strip().upper()
-
-        if any(h == clean_heading or clean_heading.startswith(h) for h in [
-            "SKILLS", "TECHNICAL SKILLS", "TECH STACK", "CORE COMPETENCIES", "TECHNOLOGIES", "TOOLS"
-        ]):
-            current_section = "technical_skills"
-            continue
-        elif any(h == clean_heading or clean_heading.startswith(h) for h in [
-            "EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT HISTORY", "PROFESSIONAL EXPERIENCE", "CAREER HISTORY"
-        ]):
-            current_section = "professional_experience"
-            continue
-        elif any(h == clean_heading or clean_heading.startswith(h) for h in [
-            "PROJECTS", "KEY PROJECTS", "PERSONAL PROJECTS", "PORTFOLIO", "OPEN SOURCE", "SELECTED WORK"
-        ]):
-            current_section = "engineering_projects"
-            continue
-        elif any(h == clean_heading or clean_heading.startswith(h) for h in [
-            "EDUCATION", "ACADEMIC BACKGROUND", "CERTIFICATIONS", "COURSES", "TRAINING"
-        ]):
-            current_section = "education_certifications"
-            continue
-
-        sections[current_section].append(trimmed)
-
-    return {k: "\n".join(v) for k, v in sections.items()}
-
-
-def extract_jd_core_facets(jd_text: str) -> dict[str, str]:
-    """
-    RAG Stage 2 - Target Requirement Decomposition:
-    Extracts core competency facets from the target Job Description:
-    - Core technical stack requirements
-    - Seniority and experience expectations
-    - Architectural scale and responsibilities
-    """
-    must_haves: list[str] = []
-    nice_to_haves: list[str] = []
-    responsibilities: list[str] = []
-
-    current_facet = must_haves
-    for line in jd_text.splitlines():
-        trimmed = line.strip()
-        if not trimmed:
-            continue
-        lower_line = trimmed.lower()
-        if any(term in lower_line for term in ["nice to have", "plus", "preferred", "bonus", "optional"]):
-            current_facet = nice_to_haves
-        elif any(term in lower_line for term in ["responsibilit", "what you will do", "duties", "role overview"]):
-            current_facet = responsibilities
-        elif any(term in lower_line for term in ["requirement", "qualification", "must have", "must-have", "skills"]):
-            current_facet = must_haves
-
-        current_facet.append(trimmed)
-
-    return {
-        "core_requirements": "\n".join(must_haves) if must_haves else jd_text[:1200],
-        "nice_to_haves": "\n".join(nice_to_haves) if nice_to_haves else "Not explicitly differentiated; evaluate against core requirements.",
-        "responsibilities": "\n".join(responsibilities) if responsibilities else "General backend engineering delivery",
-    }
-
-
-def build_rag_augmented_prompt(
-    candidate_text: str, job_description: str, rag_template: Optional[str] = None
-) -> str:
-    """
-    RAG Stage 3 - Augmented Generation Context Construction:
-    Combines semantic chunks, requirement facets, and provenance verification
-    into a calibrated, high-precision prompt using database template if provided.
-    """
-    segments = segment_candidate_profile(candidate_text)
-    jd_facets = extract_jd_core_facets(job_description)
-
-    mapping = {
-        "core_requirements": jd_facets['core_requirements'],
-        "nice_to_haves": jd_facets['nice_to_haves'],
-        "responsibilities": jd_facets['responsibilities'],
-        "technical_skills": segments['technical_skills'] or 'Refer to full candidate profile below',
-        "professional_experience": segments['professional_experience'] or 'Refer to full candidate profile below',
-        "engineering_projects": segments['engineering_projects'] or 'Refer to full candidate profile below',
-        "education_certifications": segments['education_certifications'] or 'Not provided',
-        "candidate_text": candidate_text,
-    }
-
-    if rag_template:
-        try:
-            return rag_template.format(**mapping)
-        except Exception as e:
-            logger.warning(f"[AI Engine] Error formatting custom RAG template: {e}. Falling back to default format.")
-
     return f"""### TARGET ROLE REQUIREMENTS & BENCHMARK
-[Core Mandatory Qualifications & Stack]:
-{mapping['core_requirements']}
-
-[Preferred / Secondary Skills]:
-{mapping['nice_to_haves']}
-
-[Role Scope & Responsibilities]:
-{mapping['responsibilities']}
+{job_description.strip()}
 
 ---
-### RAG RETRIEVED CANDIDATE EVIDENCE MATRIX
-[Candidate Skills & Tools Chunk]:
-{mapping['technical_skills']}
-
-[Professional Experience & Tenures Chunk]:
-{mapping['professional_experience']}
-
-[Key Projects & Engineering Artifacts Chunk]:
-{mapping['engineering_projects']}
-
-[Education & Credentials Chunk]:
-{mapping['education_certifications']}
-
----
-### FULL CANDIDATE VERBATIM PROVENANCE
-{candidate_text}
+### CANDIDATE RESUME & PORTFOLIO
+{candidate_text.strip()}
 """
 
-
-async def get_active_ai_instruction(db: Optional[Any] = None) -> Tuple[str, str]:
-    """
-    Reads the active RAG prompt template and AI system instruction from the database
-    BEFORE any AI API call is executed.
-    If database record is not present, seeds it from rag_ai_instructions.json.
-    Falls back gracefully to the JSON schema file if database is unreachable.
-    Returns: (system_instruction, rag_prompt_template).
-    """
-    from sqlalchemy import select
-    from app.models.domain import AIInstruction
-    from app.services.settings_service import load_rag_ai_instructions_schema, sync_ai_instructions_to_database
-
-    if db is not None:
-        try:
-            stmt = select(AIInstruction).where(AIInstruction.name == "default_evaluator")
-            result = await db.execute(stmt)
-            inst = result.scalar_one_or_none()
-            if inst:
-                return inst.system_instruction, inst.rag_prompt_template
-            synced_inst = await sync_ai_instructions_to_database(db)
-            return synced_inst.system_instruction, synced_inst.rag_prompt_template
-        except Exception as e:
-            logger.warning(f"[AI Engine] Error reading AI instruction from db session: {e}. Trying fallback.")
-
-    try:
-        from app.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
-            stmt = select(AIInstruction).where(AIInstruction.name == "default_evaluator")
-            result = await session.execute(stmt)
-            inst = result.scalar_one_or_none()
-            if inst:
-                return inst.system_instruction, inst.rag_prompt_template
-            synced_inst = await sync_ai_instructions_to_database(session)
-            return synced_inst.system_instruction, synced_inst.rag_prompt_template
-    except Exception as e:
-        logger.warning(f"[AI Engine] Error reading AI instruction from database: {e}. Falling back to rag_ai_instructions.json schema.")
-
-    file_schema = load_rag_ai_instructions_schema()
-    return file_schema.system_instruction, file_schema.rag_prompt_template
 
 
 def compute_request_hash(candidate_text: str, jd_text: str) -> str:
@@ -342,7 +172,6 @@ async def evaluate_candidate(
 ) -> Tuple[CandidateEvaluationResult, str]:
     """
     Evaluates candidate strictly using the multi-provider Cloud LLM cascade.
-    First reads RAG prompt template and AI system instruction from the database.
     """
     return await evaluate_candidate_with_fallback(candidate_text, job_description, db=db)
 
@@ -354,21 +183,14 @@ async def evaluate_candidate_with_fallback(
 ) -> Tuple[CandidateEvaluationResult, str]:
     """
     Executes full candidate evaluation across the multi-provider cascade:
-    1. Reads RAG prompt template and AI system instructions from the database prior to API calls.
-    2. Builds RAG augmented prompt with database template.
-    3. Multi-provider cascade: Gemini -> Groq -> Ollama Cloud.
+    1. Builds calibrated evaluation prompt.
+    2. Multi-provider cascade: Gemini -> Groq -> Ollama Cloud.
     """
-    # 1. Read RAG & AI instructions from database before API call
-    system_instruction, rag_prompt_template = await get_active_ai_instruction(db)
-    logger.info("[AI Evaluator] Loaded active RAG & AI instructions from database before API dispatch.")
+    user_prompt = build_evaluation_prompt(candidate_text, job_description)
 
-    user_prompt = build_rag_augmented_prompt(
-        candidate_text, job_description, rag_template=rag_prompt_template
-    )
-
-    # 2. Try Primary: Gemini
+    # 1. Try Primary: Gemini
     try:
-        gemini_result = await _call_gemini(user_prompt, system_instruction=system_instruction)
+        gemini_result = await _call_gemini(user_prompt, system_instruction=SYSTEM_INSTRUCTION)
         if isinstance(gemini_result, tuple):
             raw_json, model_name = gemini_result
             provider_tag = f"google/{model_name}"
@@ -390,7 +212,7 @@ async def evaluate_candidate_with_fallback(
                 api_key=settings.GROQ_API_KEY,
                 model_name=groq_model,
                 prompt=user_prompt,
-                system_instruction=system_instruction,
+                system_instruction=SYSTEM_INSTRUCTION,
             )
             cleaned_json = _clean_json_string(raw_json)
             validated = CandidateEvaluationResult.model_validate_json(cleaned_json)
@@ -402,7 +224,7 @@ async def evaluate_candidate_with_fallback(
             logger.warning(
                 f"Secondary provider (Groq {groq_model}) failed/throttled: {groq_err}. Failing over to Ollama Cloud...")
             break
-    # 4. Try Tertiary: Ollama Cloud Models Pool Fallback (Free Tier: gpt-oss:120b, gpt-oss:20b, gemma4:31b, nemotron-3-nano:30b, nemotron-3-super, nemotron-3-ultra, beam)
+    # 3. Try Tertiary: Ollama Cloud Models Pool Fallback (Free Tier: gpt-oss:120b, gpt-oss:20b, gemma4:31b, nemotron-3-nano:30b, nemotron-3-super, nemotron-3-ultra, beam)
     if settings.OLLAMA_API_KEY and settings.OLLAMA_API_KEY.strip():
         ollama_models = [
             "gpt-oss:120b",
@@ -421,7 +243,7 @@ async def evaluate_candidate_with_fallback(
                     api_key=settings.OLLAMA_API_KEY.strip(),
                     model_name=o_model,
                     prompt=user_prompt,
-                    system_instruction=system_instruction,
+                    system_instruction=SYSTEM_INSTRUCTION,
                 )
                 cleaned_json = _clean_json_string(raw_json)
                 validated = CandidateEvaluationResult.model_validate_json(cleaned_json)

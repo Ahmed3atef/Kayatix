@@ -2,12 +2,19 @@ import json
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.models.domain import EvaluationCache
+from app.models import EvaluationCache, User
+from app.services.auth_service import (
+    authenticate_user,
+    create_access_token,
+    create_user,
+    get_all_users,
+    get_current_user_optional,
+)
 from app.services.settings_service import (
     get_all_job_templates,
     get_or_create_user_settings,
@@ -23,9 +30,193 @@ templates.env.globals["provider_health"] = provider_health_cache
 router = APIRouter(include_in_schema=False)
 
 
+# ==============================================================================
+# Authentication & User Management Views
+# ==============================================================================
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(
+    request: Request,
+    next: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Renders user login page."""
+    current_user = await get_current_user_optional(request, db)
+    if current_user:
+        return RedirectResponse(url=next or "/", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"current_user": None, "next_url": next},
+    )
+
+
+@router.post("/login", response_class=HTMLResponse)
+async def login_submit(
+    request: Request,
+    next: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Processes user login submission with session cookie."""
+    form = await request.form()
+    email = str(form.get("email", "")).strip()
+    password = str(form.get("password", ""))
+
+    user = await authenticate_user(db, email, password)
+    if not user:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "current_user": None,
+                "error": "Invalid email address or password.",
+                "email": email,
+                "next_url": next,
+            },
+            status_code=400,
+        )
+
+    token = create_access_token({"sub": str(user.id), "email": user.email, "role": user.role})
+    response = RedirectResponse(url=next or "/", status_code=303)
+    response.set_cookie(
+        key="kayatix_token",
+        value=token,
+        httponly=True,
+        max_age=7 * 24 * 3600,
+        samesite="lax",
+    )
+    return response
+
+
+@router.get("/signup", response_class=HTMLResponse)
+async def signup_page(
+    request: Request,
+    next: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Renders user registration page."""
+    current_user = await get_current_user_optional(request, db)
+    if current_user:
+        return RedirectResponse(url=next or "/", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="signup.html",
+        context={"current_user": None, "next_url": next},
+    )
+
+
+@router.post("/signup", response_class=HTMLResponse)
+async def signup_submit(
+    request: Request,
+    next: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Processes user signup registration."""
+    form = await request.form()
+    full_name = str(form.get("full_name", "")).strip()
+    email = str(form.get("email", "")).strip()
+    password = str(form.get("password", ""))
+    confirm_password = str(form.get("confirm_password", ""))
+
+    if password != confirm_password:
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context={
+                "current_user": None,
+                "error": "Passwords do not match.",
+                "full_name": full_name,
+                "email": email,
+                "next_url": next,
+            },
+            status_code=400,
+        )
+
+    try:
+        user = await create_user(
+            db,
+            email=email,
+            password=password,
+            full_name=full_name,
+            role="member",
+        )
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context={
+                "current_user": None,
+                "error": e.detail,
+                "full_name": full_name,
+                "email": email,
+                "next_url": next,
+            },
+            status_code=400,
+        )
+
+    token = create_access_token({"sub": str(user.id), "email": user.email, "role": user.role})
+    response = RedirectResponse(url=next or "/", status_code=303)
+    response.set_cookie(
+        key="kayatix_token",
+        value=token,
+        httponly=True,
+        max_age=7 * 24 * 3600,
+        samesite="lax",
+    )
+    return response
+
+
+@router.get("/logout")
+async def logout_view():
+    """Logs user out and redirects to login."""
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="kayatix_token")
+    return response
+
+
+@router.get("/users", response_class=HTMLResponse)
+async def users_view(request: Request, db: AsyncSession = Depends(get_db)):
+    """User Management View: lists all users, allows role/permission updates and deletion (Admin Only)."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/users", status_code=303)
+    if not current_user.is_admin and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator permissions required to access User Management.")
+
+    all_users = await get_all_users(db)
+    return templates.TemplateResponse(
+        request=request,
+        name="users.html",
+        context={
+            "current_user": current_user,
+            "users": [
+                {
+                    "id": u.id,
+                    "email": u.email,
+                    "full_name": u.full_name,
+                    "role": u.role,
+                    "is_active": bool(u.is_active),
+                    "is_admin": bool(u.is_admin),
+                    "permissions": u.permissions or {},
+                    "created_at": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else None,
+                }
+                for u in all_users
+            ],
+        },
+    )
+
+
+# ==============================================================================
+# Platform Feature Views
+# ==============================================================================
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Main Dashboard: system overview, real-time HR talent metrics, and recent activities."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/", status_code=303)
+
     user_settings = await get_or_create_user_settings(db)
 
     # 1. Fetch recent evaluations
@@ -56,6 +247,7 @@ async def dashboard_view(request: Request, db: AsyncSession = Depends(get_db)):
         request=request,
         name="index.html",
         context={
+            "current_user": current_user,
             "recent_evaluations": recent_evaluations,
             "total_evaluations": total_evals,
             "avg_match_score": avg_match_score,
@@ -73,6 +265,10 @@ async def dashboard_view(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/screener", response_class=HTMLResponse)
 async def screener_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Resume Screener: Ingest PDF resumes & evaluate against Job Descriptions."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/screener", status_code=303)
+
     user_settings = await get_or_create_user_settings(db)
     job_templates = await get_all_job_templates(db)
     templates_payload = [
@@ -83,6 +279,7 @@ async def screener_view(request: Request, db: AsyncSession = Depends(get_db)):
         request=request,
         name="screener.html",
         context={
+            "current_user": current_user,
             "settings": user_settings,
             "job_templates": job_templates,
             "job_templates_json": json.dumps(templates_payload),
@@ -93,6 +290,10 @@ async def screener_view(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/portfolio", response_class=HTMLResponse)
 async def portfolio_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Portfolio Analyzer: Scrapes & analyzes candidate blogs and GitHub profiles."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/portfolio", status_code=303)
+
     user_settings = await get_or_create_user_settings(db)
     job_templates = await get_all_job_templates(db)
     templates_payload = [
@@ -103,6 +304,7 @@ async def portfolio_view(request: Request, db: AsyncSession = Depends(get_db)):
         request=request,
         name="portfolio.html",
         context={
+            "current_user": current_user,
             "settings": user_settings,
             "job_templates": job_templates,
             "job_templates_json": json.dumps(templates_payload),
@@ -113,11 +315,16 @@ async def portfolio_view(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/sourcing", response_class=HTMLResponse)
 async def sourcing_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Legal LinkedIn Sourcing: Google X-Ray Dorking engine."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/sourcing", status_code=303)
+
     user_settings = await get_or_create_user_settings(db)
     return templates.TemplateResponse(
         request=request,
         name="sourcing.html",
         context={
+            "current_user": current_user,
             "settings": user_settings,
         },
     )
@@ -131,6 +338,10 @@ async def history_view(
     db: AsyncSession = Depends(get_db),
 ):
     """Dedicated Evaluation History & Cache Explorer: View all deduplicated evaluations."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/history", status_code=303)
+
     stmt = select(EvaluationCache).order_by(desc(EvaluationCache.id))
 
     if q:
@@ -145,6 +356,7 @@ async def history_view(
         request=request,
         name="history.html",
         context={
+            "current_user": current_user,
             "records": records,
             "total_count": total_count,
             "query": q or "",
@@ -156,12 +368,17 @@ async def history_view(
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_view(request: Request, db: AsyncSession = Depends(get_db)):
     """Dedicated Settings Page: Manage AI provider accounts, subscriptions, and diagnostics."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login?next=/settings", status_code=303)
+
     user_settings = await get_or_create_user_settings(db)
     job_templates = await get_all_job_templates(db)
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
         context={
+            "current_user": current_user,
             "settings": user_settings,
             "job_templates": job_templates,
         },
@@ -173,6 +390,10 @@ async def evaluation_detail_view(
     evaluation_id: int, request: Request, db: AsyncSession = Depends(get_db)
 ):
     """Detailed candidate assessment report with score breakdown and interview questions."""
+    current_user = await get_current_user_optional(request, db)
+    if not current_user:
+        return RedirectResponse(url=f"/login?next=/evaluations/{evaluation_id}", status_code=303)
+
     stmt = select(EvaluationCache).where(EvaluationCache.id == evaluation_id)
     record = (await db.execute(stmt)).scalar_one_or_none()
     if not record:
@@ -182,6 +403,7 @@ async def evaluation_detail_view(
         request=request,
         name="evaluation_detail.html",
         context={
+            "current_user": current_user,
             "record": record,
         },
     )
@@ -194,8 +416,10 @@ from app.services.docs_service import get_documentation_page
 async def documentation_view(
     request: Request,
     doc_slug: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
 ):
     """Interactive Knowledge Base & Documentation: Dynamically loads and renders local Markdown pages."""
+    current_user = await get_current_user_optional(request, db)
     doc_data = get_documentation_page(doc_slug)
     if not doc_data:
         raise HTTPException(status_code=404, detail="Documentation page not found")
@@ -204,7 +428,9 @@ async def documentation_view(
         request=request,
         name="documentation.html",
         context={
+            "current_user": current_user,
             "doc": doc_data,
         },
     )
+
 

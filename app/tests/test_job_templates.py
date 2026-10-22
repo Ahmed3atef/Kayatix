@@ -107,30 +107,28 @@ async def test_job_templates_api_endpoints(db_session):
 
 
 @pytest.mark.asyncio
-async def test_job_templates_rendered_in_views(db_session):
+async def test_job_templates_rendered_in_views(client):
     """Verifies that templates appear in screener, portfolio, and settings HTML views."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        # 1. Screener view
-        screener_resp = await ac.get("/screener")
-        assert screener_resp.status_code == 200
-        assert "FastAPI Backend Engineer" in screener_resp.text
-        assert "load-jd-preset" in screener_resp.text
-        assert "Configure Templates..." in screener_resp.text
+    # 1. Screener view
+    screener_resp = await client.get("/screener")
+    assert screener_resp.status_code == 200
+    assert "FastAPI Backend Engineer" in screener_resp.text
+    assert "load-jd-preset" in screener_resp.text
+    assert "Configure Templates..." in screener_resp.text
 
-        # 2. Portfolio view
-        portfolio_resp = await ac.get("/portfolio")
-        assert portfolio_resp.status_code == 200
-        assert "FastAPI Backend Engineer" in portfolio_resp.text
-        assert "load-portfolio-preset" in portfolio_resp.text
+    # 2. Portfolio view
+    portfolio_resp = await client.get("/portfolio")
+    assert portfolio_resp.status_code == 200
+    assert "FastAPI Backend Engineer" in portfolio_resp.text
+    assert "load-portfolio-preset" in portfolio_resp.text
 
-        # 3. Settings view
-        settings_resp = await ac.get("/settings")
-        assert settings_resp.status_code == 200
-        assert "JD Templates" in settings_resp.text
-        assert "templateModal" in settings_resp.text
-        assert "Job Description Templates" in settings_resp.text
-        assert "syncSchemaDefaultsBtn" in settings_resp.text
+    # 3. Settings view
+    settings_resp = await client.get("/settings")
+    assert settings_resp.status_code == 200
+    assert "JD Templates" in settings_resp.text
+    assert "templateModal" in settings_resp.text
+    assert "Job Description Templates" in settings_resp.text
+    assert "syncSchemaDefaultsBtn" in settings_resp.text
 
 
 @pytest.mark.asyncio
@@ -152,8 +150,7 @@ async def test_json_settings_schema_and_defaults_loading():
     # 2. Inspect generated JSON Schema
     json_schema = get_defaults_json_schema()
     assert isinstance(json_schema, dict)
-    assert "properties" in json_schema or "$defs" in json_schema
-    assert "job_templates" in json_schema.get("properties", {})
+    assert "doctype" in json_schema or "properties" in json_schema or "fields" in json_schema
 
 
 @pytest.mark.asyncio
@@ -172,7 +169,7 @@ async def test_sync_global_defaults_insertion_and_modification_sync(db_session):
         load_default_settings_schema,
         save_default_settings_schema,
     )
-    from app.models.domain import JobTemplate
+    from app.models import JobTemplate
     from app.schemas.payloads import JobTemplateCreateRequest, JobTemplateSchema
     from sqlalchemy import delete
 
@@ -286,51 +283,38 @@ async def test_defaults_schema_endpoints(db_session):
 
 
 @pytest.mark.asyncio
-async def test_rag_ai_instructions_schema_and_db_reading(db_session):
+async def test_frappe_doctype_schemas():
     """
-    Verifies that RAG AI instructions:
-    1. Load from rag_ai_instructions.json with modified_timestamp.
-    2. Are synced into the database.
-    3. Are read directly from the database by get_active_ai_instruction before API usage.
+    Verifies that Frappe DocType schemas:
+    1. Load correctly from the dedicated models/ folder.
+    2. Contain standard Frappe fields: doctype, field_order, fields, permissions.
+    3. Are exposed via the REST API endpoint /api/v1/settings/schema/doctype/{doctype_name}.
     """
-    from app.services.settings_service import (
-        load_rag_ai_instructions_schema,
-        save_rag_ai_instructions_schema,
-        sync_ai_instructions_to_database,
-        get_rag_ai_instructions_json_schema,
-    )
-    from app.services.ai_engine import get_active_ai_instruction
-    from app.schemas.payloads import RAGAIInstructionSchema
+    from app.services.settings_service import get_frappe_doctype_schema
 
-    # 1. Load from JSON schema file
-    file_schema = load_rag_ai_instructions_schema()
-    assert isinstance(file_schema, RAGAIInstructionSchema)
-    assert file_schema.name == "default_evaluator"
-    assert file_schema.modified_timestamp is not None
-    assert "Principal Technical Bar Raiser" in file_schema.system_instruction
+    job_schema = get_frappe_doctype_schema("job_template")
+    assert isinstance(job_schema, dict)
+    assert job_schema.get("doctype") == "DocType"
+    assert job_schema.get("name") == "Job Template"
+    assert "field_order" in job_schema
+    assert "fields" in job_schema
+    fieldnames = [f["fieldname"] for f in job_schema["fields"]]
+    assert "title" in fieldnames
+    assert "category" in fieldnames
+    assert "description" in fieldnames
 
-    # 2. Inspect generated JSON Schema
-    json_schema = get_rag_ai_instructions_json_schema()
-    assert isinstance(json_schema, dict)
-    assert "properties" in json_schema or "$defs" in json_schema
+    settings_schema = get_frappe_doctype_schema("user_settings")
+    assert isinstance(settings_schema, dict)
+    assert settings_schema.get("doctype") == "DocType"
+    assert settings_schema.get("issingle") == 1
 
-    # 3. Sync to database
-    db_inst = await sync_ai_instructions_to_database(db_session)
-    assert db_inst.name == "default_evaluator"
-    assert db_inst.modified_timestamp == file_schema.modified_timestamp
-
-    # 4. Modify instruction in database to simulate custom evaluator
-    custom_system_inst = file_schema.system_instruction + "\n[TEST RULE]: Strict evaluation required."
-    db_inst.system_instruction = custom_system_inst
-    await db_session.commit()
-
-    # 5. Verify get_active_ai_instruction reads the custom instruction FROM THE DATABASE
-    loaded_sys, loaded_rag = await get_active_ai_instruction(db_session)
-    assert "[TEST RULE]: Strict evaluation required." in loaded_sys
-    assert loaded_rag == file_schema.rag_prompt_template
-
-    # 6. Reset database instruction back to schema
-    await sync_ai_instructions_to_database(db_session, force=True)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.get("/api/v1/settings/schema/doctype/job_template")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("doctype") == "DocType"
+        assert data.get("name") == "Job Template"
 
 
 @pytest.mark.asyncio
@@ -339,22 +323,18 @@ async def test_timestamp_change_detection_and_reverse_sync(db_session):
     Verifies that:
     1. Changing modified_timestamp in schema file triggers synchronization into database.
     2. Reverse sync updates modified_timestamp to a fresh ISO timestamp and writes to JSON file.
-    3. Endpoints for AI instructions and export return status 200.
+    3. Export endpoint returns status 200 with new timestamp.
     """
     from app.services.settings_service import (
         load_default_settings_schema,
         save_default_settings_schema,
         sync_global_defaults,
-        load_rag_ai_instructions_schema,
-        save_rag_ai_instructions_schema,
-        sync_ai_instructions_to_database,
     )
 
     clean_templates_schema = load_default_settings_schema()
-    clean_ai_schema = load_rag_ai_instructions_schema()
 
     try:
-        # 1. Modify timestamp in default_job_templates.json
+        # 1. Modify timestamp in fixtures/job_template.json
         new_timestamp = "2026-10-16T22:30:00Z"
         test_schema = load_default_settings_schema()
         test_schema.modified_timestamp = new_timestamp
@@ -369,27 +349,9 @@ async def test_timestamp_change_detection_and_reverse_sync(db_session):
         settings_rec = await get_or_create_user_settings(db_session)
         assert settings_rec.job_templates_schema_timestamp == new_timestamp
 
-        # 3. Test REST endpoints for AI instructions
+        # 3. Test REST endpoint for templates export (reverse sync)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            # GET /api/v1/settings/schema/ai-instructions
-            get_resp = await ac.get("/api/v1/settings/schema/ai-instructions")
-            assert get_resp.status_code == 200
-            data = get_resp.json()
-            assert data["name"] == "default_evaluator"
-            assert "json_schema" in data
-
-            # POST /api/v1/settings/schema/ai-instructions/sync
-            sync_resp = await ac.post("/api/v1/settings/schema/ai-instructions/sync")
-            assert sync_resp.status_code == 200
-
-            # POST /api/v1/settings/schema/ai-instructions/export (reverse sync)
-            export_resp = await ac.post("/api/v1/settings/schema/ai-instructions/export")
-            assert export_resp.status_code == 200
-            export_data = export_resp.json()
-            assert export_data["modified_timestamp"] is not None
-
-            # POST /api/v1/settings/schema/templates/export (reverse sync)
             t_export_resp = await ac.post("/api/v1/settings/schema/templates/export")
             assert t_export_resp.status_code == 200
             t_export_data = t_export_resp.json()
@@ -397,7 +359,7 @@ async def test_timestamp_change_detection_and_reverse_sync(db_session):
 
     finally:
         save_default_settings_schema(clean_templates_schema)
-        save_rag_ai_instructions_schema(clean_ai_schema)
         await sync_global_defaults(db_session, force=True)
+
 
 

@@ -107,7 +107,7 @@ async def execute_linkedin_xray_search(req: XRaySearchRequest) -> List[XRayProfi
         try:
             from sqlalchemy import select
             from app.core.database import AsyncSessionLocal
-            from app.models.domain import UserSettings
+            from app.models import UserSettings
 
             async with AsyncSessionLocal() as session:
                 stmt = select(UserSettings)

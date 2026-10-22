@@ -209,7 +209,6 @@
                     <th>Source Type</th>
                     <th>Match Score</th>
                     <th>AI Provider</th>
-                    <th>Deduplication Hash</th>
                     <th>Evaluated At</th>
                     <th class="text-end pe-4">Report</th>
                 </tr>
@@ -239,9 +238,6 @@
                     </td>
                     <td>
                         <span class="badge bg-secondary-subtle text-secondary font-monospace">{{ record.provider_used }}</span>
-                    </td>
-                    <td>
-                        <span class="font-monospace small text-muted" title="{{ record.request_hash }}">{{ record.request_hash[:12] }}...</span>
                     </td>
                     <td class="small text-muted">
                         {{ record.created_at.strftime('%Y-%m-%d %H:%M') if record.created_at else 'N/A' }}

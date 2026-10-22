@@ -11,8 +11,6 @@ from app.schemas.payloads import (
     JobTemplateCreateRequest,
     JobTemplateResponse,
     JobTemplateUpdateRequest,
-    RAGAIInstructionResponse,
-    RAGAIInstructionSchema,
     SettingsValidationResponse,
     UserSettingsResponse,
     UserSettingsUpdateRequest,
@@ -22,16 +20,12 @@ from app.services.settings_service import (
     delete_job_template,
     get_all_job_templates,
     get_defaults_json_schema,
+    get_frappe_doctype_schema,
     get_job_template_by_id,
-    get_rag_ai_instructions_json_schema,
     get_settings_summary,
     load_default_settings_schema,
-    load_rag_ai_instructions_schema,
     reset_default_job_templates,
     save_default_settings_schema,
-    save_rag_ai_instructions_schema,
-    sync_ai_instruction_to_json_file,
-    sync_ai_instructions_to_database,
     sync_global_defaults,
     sync_job_templates_to_json_file,
     template_to_response,
@@ -190,98 +184,25 @@ async def update_defaults_schema_and_sync(
 @router.post("/schema/templates/export", response_model=AppDefaultsSchema)
 async def export_database_templates_to_json(db: AsyncSession = Depends(get_db)):
     """
-    Reverse sync: Exports current database JobTemplates and UserSettings to default_job_templates.json
+    Reverse sync: Exports current database JobTemplates and UserSettings to fixtures/
     with an updated modified_timestamp.
     """
     return await sync_job_templates_to_json_file(db)
 
 
 # ==============================================================================
-# RAG Prompt Template & AI System Instructions Endpoints
+# Frappe DocType Schema Endpoints
 # ==============================================================================
 
-@router.get("/schema/ai-instructions", response_model=RAGAIInstructionResponse)
-async def get_ai_instructions(db: AsyncSession = Depends(get_db)):
+@router.get("/schema/doctype/{doctype_name}")
+async def get_doctype_schema(doctype_name: str):
     """
-    Retrieves the active RAG prompt template and AI system instruction from the database.
-    Includes the official JSON Schema definition for validation.
+    Retrieves the Frappe DocType JSON Schema for the specified DocType
+    (e.g., job_template, user_settings, candidate_evaluation, candidate, job).
     """
-    from sqlalchemy import select
-    from app.models.domain import AIInstruction
-    stmt = select(AIInstruction).where(AIInstruction.name == "default_evaluator")
-    result = await db.execute(stmt)
-    inst = result.scalar_one_or_none()
+    schema = get_frappe_doctype_schema(doctype_name)
+    return schema
 
-    if not inst:
-        inst = await sync_ai_instructions_to_database(db)
-
-    return RAGAIInstructionResponse(
-        id=inst.id,
-        name=inst.name,
-        description=inst.description,
-        modified_timestamp=inst.modified_timestamp,
-        system_instruction=inst.system_instruction,
-        rag_prompt_template=inst.rag_prompt_template,
-        created_at=inst.created_at.strftime("%Y-%m-%d %H:%M") if inst.created_at else None,
-        updated_at=inst.updated_at.strftime("%Y-%m-%d %H:%M") if inst.updated_at else None,
-        json_schema=get_rag_ai_instructions_json_schema(),
-    )
-
-
-@router.post("/schema/ai-instructions/sync", response_model=RAGAIInstructionResponse)
-async def sync_ai_instructions(
-    force: bool = False,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Synchronizes RAG & AI instructions from rag_ai_instructions.json into the active database.
-    Checks modified_timestamp to detect if file changed.
-    """
-    inst = await sync_ai_instructions_to_database(db, force=force)
-    return RAGAIInstructionResponse(
-        id=inst.id,
-        name=inst.name,
-        description=inst.description,
-        modified_timestamp=inst.modified_timestamp,
-        system_instruction=inst.system_instruction,
-        rag_prompt_template=inst.rag_prompt_template,
-        created_at=inst.created_at.strftime("%Y-%m-%d %H:%M") if inst.created_at else None,
-        updated_at=inst.updated_at.strftime("%Y-%m-%d %H:%M") if inst.updated_at else None,
-        json_schema=get_rag_ai_instructions_json_schema(),
-    )
-
-
-@router.put("/schema/ai-instructions", response_model=RAGAIInstructionResponse)
-async def update_ai_instructions(
-    payload: RAGAIInstructionSchema,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Updates RAG & AI instructions in both rag_ai_instructions.json and the database.
-    Updates modified_timestamp to ensure both stay strictly in sync.
-    """
-    save_rag_ai_instructions_schema(payload)
-    inst = await sync_ai_instructions_to_database(db, force=True)
-    return RAGAIInstructionResponse(
-        id=inst.id,
-        name=inst.name,
-        description=inst.description,
-        modified_timestamp=inst.modified_timestamp,
-        system_instruction=inst.system_instruction,
-        rag_prompt_template=inst.rag_prompt_template,
-        created_at=inst.created_at.strftime("%Y-%m-%d %H:%M") if inst.created_at else None,
-        updated_at=inst.updated_at.strftime("%Y-%m-%d %H:%M") if inst.updated_at else None,
-        json_schema=get_rag_ai_instructions_json_schema(),
-    )
-
-
-@router.post("/schema/ai-instructions/export", response_model=RAGAIInstructionSchema)
-async def export_ai_instructions_to_json(db: AsyncSession = Depends(get_db)):
-    """
-    Reverse sync: Reads AIInstruction from the database, updates modified_timestamp,
-    and updates rag_ai_instructions.json.
-    """
-    return await sync_ai_instruction_to_json_file(db)
 
 
 

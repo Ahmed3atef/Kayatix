@@ -1,0 +1,10 @@
+[
+  {
+    "doctype": "User Settings",
+    "project_name": "Kayatix - A.Y.A.T. Engine",
+    "version": "1.0.0",
+    "subscription_tier": "standard",
+    "evaluation_mode": "llm_cascade",
+    "rate_limit_rpm": 15
+  }
+]

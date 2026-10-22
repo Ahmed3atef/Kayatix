@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up - Kayatix A.Y.A.T. Engine{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-5">
+    <div class="col-md-6 col-lg-5 col-xl-4">
+        <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
+            <div class="card-header bg-dark text-white text-center py-4 border-bottom border-primary border-3">
+                <div class="badge bg-primary rounded-circle p-3 mb-2 shadow">
+                    <i class="bi bi-person-plus fs-3"></i>
+                </div>
+                <h4 class="fw-bold mb-1">Create Account</h4>
+                <p class="text-white-50 small mb-0">Join Kayatix AI Talent Intelligence</p>
+            </div>
+            <div class="card-body p-4 p-sm-5">
+                {% if error %}
+                <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 small rounded-3 mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-6 flex-shrink-0"></i>
+                    <div>{{ error }}</div>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="/signup{% if next_url %}?next={{ next_url | urlencode }}{% endif %}" onsubmit="return validatePasswords()">
+                    <div class="mb-3">
+                        <label for="full_name" class="form-label fw-semibold small text-muted">Full Name</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" id="full_name" name="full_name" value="{{ full_name or '' }}" placeholder="Sarah Connor" required autofocus>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-semibold small text-muted">Email Address</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-envelope"></i></span>
+                            <input type="email" class="form-control border-start-0 ps-0" id="email" name="email" value="{{ email or '' }}" placeholder="name@company.com" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label fw-semibold small text-muted">Password (min 6 characters)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-lock"></i></span>
+                            <input type="password" class="form-control border-start-0 ps-0" id="password" name="password" minlength="6" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="confirm_password" class="form-label fw-semibold small text-muted">Confirm Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-lock-fill"></i></span>
+                            <input type="password" class="form-control border-start-0 ps-0" id="confirm_password" name="confirm_password" minlength="6" placeholder="••••••••" required>
+                        </div>
+                        <div id="passwordError" class="text-danger small mt-1 d-none">Passwords do not match.</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm rounded-3 d-flex align-items-center justify-content-center gap-2">
+                        <i class="bi bi-person-check"></i> <span>Create Your Account</span>
+                    </button>
+                </form>
+
+                <div class="text-center mt-4 pt-3 border-top">
+                    <p class="small text-muted mb-0">Already registered? 
+                        <a href="/login{% if next_url %}?next={{ next_url | urlencode }}{% endif %}" class="fw-semibold text-primary text-decoration-none">Sign In</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function validatePasswords() {
+    const p1 = document.getElementById('password').value;
+    const p2 = document.getElementById('confirm_password').value;
+    const err = document.getElementById('passwordError');
+    if (p1 !== p2) {
+        err.classList.remove('d-none');
+        return false;
+    }
+    err.classList.add('d-none');
+    return true;
+}
+</script>
+{% endblock %}

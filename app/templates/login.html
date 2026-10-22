@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - Kayatix A.Y.A.T. Engine{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-5">
+    <div class="col-md-6 col-lg-5 col-xl-4">
+        <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
+            <div class="card-header bg-dark text-white text-center py-4 border-bottom border-primary border-3">
+                <div class="badge bg-primary rounded-circle p-3 mb-2 shadow">
+                    <i class="bi bi-robot fs-3"></i>
+                </div>
+                <h4 class="fw-bold mb-1">Kayatix Platform</h4>
+                <p class="text-white-50 small mb-0">Sign in to access AI Talent Intelligence</p>
+            </div>
+            <div class="card-body p-4 p-sm-5">
+                {% if error %}
+                <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 small rounded-3 mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-6 flex-shrink-0"></i>
+                    <div>{{ error }}</div>
+                </div>
+                {% endif %}
+
+                {% if message %}
+                <div class="alert alert-success d-flex align-items-center gap-2 py-2 px-3 small rounded-3 mb-4" role="alert">
+                    <i class="bi bi-check-circle-fill fs-6 flex-shrink-0"></i>
+                    <div>{{ message }}</div>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="/login{% if next_url %}?next={{ next_url | urlencode }}{% endif %}">
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-semibold small text-muted">Email Address</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-envelope"></i></span>
+                            <input type="email" class="form-control border-start-0 ps-0" id="email" name="email" value="{{ email or '' }}" placeholder="name@company.com" required autofocus>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="password" class="form-label fw-semibold small text-muted">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-lock"></i></span>
+                            <input type="password" class="form-control border-start-0 border-end-0 ps-0" id="password" name="password" placeholder="••••••••" required>
+                            <button class="btn btn-outline-secondary border-start-0" type="button" onclick="togglePasswordVisibility('password', this)">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm rounded-3 d-flex align-items-center justify-content-center gap-2">
+                        <i class="bi bi-box-arrow-in-right"></i> <span>Sign In to Workspace</span>
+                    </button>
+                </form>
+
+                <div class="text-center mt-4 pt-3 border-top">
+                    <p class="small text-muted mb-0">Don't have an account yet? 
+                        <a href="/signup{% if next_url %}?next={{ next_url | urlencode }}{% endif %}" class="fw-semibold text-primary text-decoration-none">Sign Up</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePasswordVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('bi-eye');
+        icon.classList.add('bi-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('bi-eye-slash');
+        icon.classList.add('bi-eye');
+    }
+}
+</script>
+{% endblock %}

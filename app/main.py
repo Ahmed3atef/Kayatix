@@ -9,11 +9,14 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
-from app.models.domain import UserSettings
+from app.models import UserSettings, Base, sync_all_models_to_database
 from app.api.v1.endpoints_evaluation import router as evaluation_router
 from app.api.v1.endpoints_sourcing import router as sourcing_router
 from app.api.v1.endpoints_settings import router as settings_router
+from app.api.v1.endpoints_auth import router as auth_router
+from app.api.v1.endpoints_users import router as users_router
 from app.api.views import router as views_router
+
 
 # Setup clean, visible console logging across the entire platform
 logging.basicConfig(
@@ -30,9 +33,17 @@ BASE_DIR = Path(__file__).resolve().parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database tables automatically on startup (SQLAlchemy checks if tables exist)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Asynchronously initialize all SQLAlchemy tables on startup
+    await sync_all_models_to_database(engine)
+
+    # Seed system fixtures (job templates & user settings) using async session
+    try:
+        from app.fixtures.loader import load_fixtures_to_database
+        async with AsyncSessionLocal() as session:
+            fixture_res = await load_fixtures_to_database(session)
+            logger.info(f"[Startup Fixtures] Fixtures initialized: {fixture_res.get('status')}")
+    except Exception as e:
+        logger.error(f"[Startup Fixtures] Fixtures seeding error: {e}", exc_info=True)
 
     # Sync UserSettings and Job Templates schema defaults into database (Global Insertion & Schema Sync)
     try:
@@ -47,10 +58,19 @@ async def lifespan(app: FastAPI):
             sync_res = await sync_global_defaults(session)
             logger.info(f"[Startup Global Defaults Sync] {sync_res.message}")
 
+            # Bootstrap default administrator user strictly configured in .env or system environment
+            from app.services.auth_service import bootstrap_default_admin
+            admin_user = await bootstrap_default_admin(session)
+            if admin_user:
+                logger.info(f"[Startup Auth] Verified default administrator: {admin_user.email}")
+            else:
+                logger.info("[Startup Auth] No default administrator credentials in .env/environment.")
+
             from app.core.database import mask_database_url
             logger.info("=" * 60)
             logger.info(" Kayatix A.Y.A.T. Engine - Active Configuration")
             logger.info(f" -> Database Backend : {mask_database_url(settings.DATABASE_URL)}")
+            logger.info(f" -> Default Admin    : {settings.ADMIN_EMAIL if settings.ADMIN_EMAIL else '[NOT SET IN .ENV]'}")
             logger.info(f" -> Google Gemini    : {'[ACTIVE]' if settings.GEMINI_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Groq Cloud       : {'[ACTIVE]' if settings.GROQ_API_KEY else '[NOT SET]'}")
             logger.info(f" -> Ollama Cloud    : {'[ACTIVE]' if settings.OLLAMA_API_KEY else '[NOT SET]'}")
@@ -58,6 +78,7 @@ async def lifespan(app: FastAPI):
             logger.info(f" -> Evaluation Mode  : {settings.EVALUATION_MODE}")
             logger.info(f" -> Subscription     : {settings.SUBSCRIPTION_TIER.upper()}")
             logger.info("=" * 60)
+
     except Exception as e:
         logger.error(f"[Startup] Error reading settings from database: {e}", exc_info=True)
 
@@ -102,9 +123,12 @@ if static_path.exists():
 app.include_router(views_router)
 
 # Include API V1 routers
+app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(evaluation_router)
 app.include_router(sourcing_router)
 app.include_router(settings_router)
+
 
 
 @app.get("/health", tags=["System"])

@@ -1,8 +1,25 @@
 """
-Database domain models.
+Kayatix SQLAlchemy Domain Models Registry.
+Clean, organized, single-file per table declarative models.
 """
 
-from app.models.domain import Base, EvaluationCache, Job, Candidate, UserSettings
+from app.models.base import Base, sync_all_models_to_database, utc_now
+from app.models.candidate import Candidate
+from app.models.candidate_evaluation import CandidateEvaluation, EvaluationCache
+from app.models.job import Job
+from app.models.job_template import JobTemplate
+from app.models.user import User
+from app.models.user_settings import UserSettings
 
-__all__ = ["Base", "EvaluationCache", "Job", "Candidate", "UserSettings"]
-
+__all__ = [
+    "Base",
+    "utc_now",
+    "sync_all_models_to_database",
+    "Candidate",
+    "CandidateEvaluation",
+    "EvaluationCache",
+    "Job",
+    "JobTemplate",
+    "User",
+    "UserSettings",
+]
