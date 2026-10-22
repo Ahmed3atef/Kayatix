@@ -3,7 +3,6 @@ Fixture loading and database seeding engine for Kayatix.
 Reads entity fixtures from the fixtures/ directory and populates / synchronizes database tables.
 """
 
-from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path

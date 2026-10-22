@@ -18,13 +18,13 @@ from app.api.v1.endpoints_users import router as users_router
 from app.api.views import router as views_router
 
 
-# Setup clean, visible console logging across the entire platform
-logging.basicConfig(
+from app.core.timezone import configure_timezone_logging, get_app_timezone
+
+# Setup clean, visible console logging across the entire platform in the configured country timezone
+configure_timezone_logging(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)-7s | [%(name)s] %(message)s",
-    datefmt="%H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-    force=True,
+    datefmt="%Y-%m-%d %H:%M:%S",
+    fmt="%(asctime)s | %(levelname)-7s | [%(name)s] %(message)s",
 )
 logger = logging.getLogger("kayatix.server")
 
@@ -35,6 +35,7 @@ BASE_DIR = Path(__file__).resolve().parent
 async def lifespan(app: FastAPI):
     # Asynchronously initialize all SQLAlchemy tables on startup
     await sync_all_models_to_database(engine)
+    logger.info(f"[Startup Timezone] Localized country timezone active: '{settings.TIMEZONE}' ({get_app_timezone()})")
 
     # Seed system fixtures (job templates & user settings) using async session
     try:

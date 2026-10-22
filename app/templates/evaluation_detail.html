@@ -41,7 +41,7 @@
                                 <span class="badge bg-secondary font-monospace">{{ record.provider_used }}</span>
                                 {% endif %}
                             </span>
-                            <span><i class="bi bi-calendar3 me-1"></i> Evaluated: {{ record.created_at.strftime('%Y-%m-%d %H:%M UTC') if record.created_at else 'N/A' }}</span>
+                            <span><i class="bi bi-calendar3 me-1"></i> Evaluated: {{ record.created_at.strftime('%Y-%m-%d %H:%M') if record.created_at else 'N/A' }}</span>
                         </div>
                     </div>
                     <div class="text-md-end d-flex flex-column align-items-md-end gap-2">

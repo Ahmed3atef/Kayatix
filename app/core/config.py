@@ -71,6 +71,22 @@ def resolve_admin_credentials(env_path: Optional[str] = None) -> dict:
     }
 
 
+def resolve_timezone(env_path: Optional[str] = None) -> str:
+    """
+    Resolves active system timezone following strict priority order:
+    1. Read TIMEZONE from .env file if it exists and defines a non-empty value.
+    2. Read APP_TIMEZONE from .env file if TIMEZONE is not defined.
+    3. Read TIMEZONE or APP_TIMEZONE from system environment variables (os.environ).
+    4. Fall back to 'UTC' if neither is set.
+    """
+    tz = resolve_env_variable("TIMEZONE", None, env_path=env_path) or resolve_env_variable(
+        "APP_TIMEZONE", None, env_path=env_path
+    )
+    if not tz:
+        return "UTC"
+    return tz.strip().strip("'\"")
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Kayatix (A.Y.A.T. Engine)"
     VERSION: str = "2.0.0"
@@ -102,6 +118,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "kayatix-jwt-session-secret-key-32-chars-min"
     ACCESS_TOKEN_EXPIRE_DAYS: int = 7
 
+    # System Country Timezone (IANA format, e.g. Africa/Cairo, Asia/Riyadh, UTC)
+    TIMEZONE: str = "UTC"
+    APP_TIMEZONE: Optional[str] = None
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def model_post_init(self, __context) -> None:
@@ -130,6 +150,11 @@ class Settings(BaseSettings):
         resolved_secret = resolve_env_variable("SECRET_KEY", None)
         if resolved_secret:
             self.SECRET_KEY = resolved_secret
+
+        # Apply strict TIMEZONE resolution order (.env -> os.environ -> UTC)
+        resolved_tz = resolve_timezone()
+        if resolved_tz:
+            self.TIMEZONE = resolved_tz
 
 
 

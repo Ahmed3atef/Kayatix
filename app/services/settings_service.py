@@ -354,6 +354,8 @@ def generate_config_text(record: UserSettings) -> str:
         f'OLLAMA_BASE_URL="{getattr(record, "ollama_base_url", None) or settings.OLLAMA_BASE_URL}"\n\n'
         f'# Legal LinkedIn X-Ray Search Keys\n'
         f'GOOGLE_CSE_CX_ID="{record.google_cse_cx_id or ""}"\n\n'
+        f'# System Country Timezone\n'
+        f'TIMEZONE="{settings.TIMEZONE}"\n\n'
         f'# Engine & Subscription Modes\n'
         f'EVALUATION_MODE="{record.evaluation_mode or DEFAULT_EVALUATION_MODE}"\n'
         f'SUBSCRIPTION_TIER="{record.subscription_tier or DEFAULT_SUBSCRIPTION_TIER}"\n'
@@ -688,6 +690,10 @@ async def update_user_settings(
                 settings.RATE_LIMIT_RPM = record.rate_limit_rpm
             except ValueError:
                 pass
+        if "TIMEZONE" in parsed:
+            tz_val = parsed["TIMEZONE"].strip().strip("'\"")
+            if tz_val:
+                settings.TIMEZONE = tz_val
         record.env_content = req.env_content.strip()
 
     # Process individual structured fields
